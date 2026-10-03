@@ -1,12 +1,12 @@
 //! Reference In-Memory Prefix Trie implementation of `Store`.
 
-use alloc::collections::BTreeMap;
-use alloc::string::String;
-use alloc::vec::Vec;
 use crate::error::StoreError;
 use crate::node::Node;
 use crate::path::Path;
 use crate::store::Store;
+use alloc::collections::BTreeMap;
+use alloc::string::String;
+use alloc::vec::Vec;
 
 #[derive(Default, Clone, Debug)]
 struct TrieNode {
@@ -76,12 +76,16 @@ impl Store for MemStore {
     }
 
     fn remove(&mut self, path: &Path) -> Result<Option<Node>, StoreError> {
-        fn remove_rec(cur: &mut TrieNode, segments: &[String], idx: usize) -> Result<Option<Node>, StoreError> {
+        fn remove_rec(
+            cur: &mut TrieNode,
+            segments: &[String],
+            idx: usize,
+        ) -> Result<Option<Node>, StoreError> {
             if idx == segments.len() {
-                if let Some(existing) = &cur.node {
-                    if existing.readonly {
-                        return Err(StoreError::ReadOnly(Path::from_segments(segments.to_vec())));
-                    }
+                if let Some(existing) = &cur.node
+                    && existing.readonly
+                {
+                    return Err(StoreError::ReadOnly(Path::from_segments(segments.to_vec())));
                 }
                 return Ok(cur.node.take());
             }
@@ -118,7 +122,7 @@ impl Store for MemStore {
 
         cur.children
             .iter()
-            .filter(|(_, child)| child.node.as_ref().map_or(true, |n| !n.hidden))
+            .filter(|(_, child)| child.node.as_ref().is_none_or(|n| !n.hidden))
             .map(|(k, _)| prefix.join(k))
             .collect()
     }
@@ -135,10 +139,10 @@ impl Store for MemStore {
         }
 
         fn collect_rec(cur: &TrieNode, cur_path: &Path, results: &mut Vec<Path>) {
-            if let Some(node) = &cur.node {
-                if !node.hidden {
-                    results.push(cur_path.clone());
-                }
+            if let Some(node) = &cur.node
+                && !node.hidden
+            {
+                results.push(cur_path.clone());
             }
             for (seg, child) in &cur.children {
                 collect_rec(child, &cur_path.join(seg), results);
@@ -186,7 +190,9 @@ mod tests {
         let mut store = MemStore::new();
         let path = Path::parse("/system/kernel/version");
 
-        store.insert_node(&path, Node::read_only(Value::from("1.0.0"))).unwrap();
+        store
+            .insert_node(&path, Node::read_only(Value::from("1.0.0")))
+            .unwrap();
 
         let err = store.insert(&path, Value::from("2.0.0")).unwrap_err();
         assert_eq!(err, StoreError::ReadOnly(path.clone()));
@@ -198,8 +204,12 @@ mod tests {
     #[test]
     fn test_memstore_hierarchy_listing() {
         let mut store = MemStore::new();
-        store.insert(&Path::parse("/a/b/c"), Value::from(1)).unwrap();
-        store.insert(&Path::parse("/a/b/d"), Value::from(2)).unwrap();
+        store
+            .insert(&Path::parse("/a/b/c"), Value::from(1))
+            .unwrap();
+        store
+            .insert(&Path::parse("/a/b/d"), Value::from(2))
+            .unwrap();
         store.insert(&Path::parse("/a/e"), Value::from(3)).unwrap();
 
         let children_a = store.list_children(&Path::parse("/a"));

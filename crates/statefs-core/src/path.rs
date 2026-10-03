@@ -68,6 +68,12 @@ impl Path {
         self.segments.len()
     }
 
+    /// Returns `true` if the path has no segments (root path).
+    #[inline]
+    pub fn is_empty(&self) -> bool {
+        self.segments.is_empty()
+    }
+
     /// Returns the segments slice.
     #[inline]
     pub fn segments(&self) -> &[String] {
@@ -163,11 +169,17 @@ mod tests {
     #[test]
     fn test_path_parse_and_display() {
         let p1 = Path::parse("/plugins/moderation/cvars/ban_time");
-        assert_eq!(p1.segments(), &["plugins", "moderation", "cvars", "ban_time"]);
+        assert_eq!(
+            p1.segments(),
+            &["plugins", "moderation", "cvars", "ban_time"]
+        );
         assert_eq!(p1.to_string(), "/plugins/moderation/cvars/ban_time");
 
         let p2 = Path::parse("plugins.moderation.errors.not_found");
-        assert_eq!(p2.segments(), &["plugins", "moderation", "errors", "not_found"]);
+        assert_eq!(
+            p2.segments(),
+            &["plugins", "moderation", "errors", "not_found"]
+        );
         assert_eq!(p2.to_string(), "/plugins/moderation/errors/not_found");
 
         let root = Path::parse("/");

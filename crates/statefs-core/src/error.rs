@@ -1,7 +1,7 @@
 //! Core error definitions for StateFS.
 
-use alloc::string::String;
 use crate::path::Path;
+use alloc::string::String;
 
 /// Core errors emitted by StateFS store operations.
 #[derive(Debug, Clone, PartialEq, Eq)]

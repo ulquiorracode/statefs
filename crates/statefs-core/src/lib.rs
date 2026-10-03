@@ -41,7 +41,10 @@ mod tests {
 
         // 1. Insert hierarchical configuration
         store
-            .insert(&Path::parse("/plugins/moderation/cvars/enabled"), Value::from(true))
+            .insert(
+                &Path::parse("/plugins/moderation/cvars/enabled"),
+                Value::from(true),
+            )
             .unwrap();
         store
             .insert(

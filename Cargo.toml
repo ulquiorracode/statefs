@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "crates/statefs-core",
+    "crates/statefs-stitch",
 ]
 resolver = "3"
 

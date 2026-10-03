@@ -1,10 +1,10 @@
 //! Fundamental Store trait contract for StateFS nanokernel.
 
-use alloc::vec::Vec;
 use crate::error::StoreError;
 use crate::node::Node;
 use crate::path::Path;
 use crate::value::Value;
+use alloc::vec::Vec;
 
 /// Primitive storage contract for hierarchical state trees.
 pub trait Store {
