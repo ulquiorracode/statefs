@@ -8,11 +8,13 @@ repository.workspace = true
 description = "Pure nanokernel for StateFS: segmented paths, universal values, and memory trie store"
 
 [features]
-default = ["std"]
+default = ["std", "simd"]
 std = []
+simd = ["dep:memchr"]
 serde = ["dep:serde"]
 
 [dependencies]
+memchr = { version = "2.7", default-features = false, optional = true }
 serde = { version = "1.0", default-features = false, features = ["alloc", "derive"], optional = true }
 
 [dev-dependencies]

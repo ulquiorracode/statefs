@@ -132,11 +132,42 @@ impl MemStore {
     /// Zero-allocation lookup by raw string path with `/` or `\` separators.
     pub fn get_str(&self, raw_path: &str) -> Option<&Node> {
         let trimmed = raw_path.trim();
-        let segments = trimmed
-            .split(['/', '\\'])
-            .map(|s| s.trim())
-            .filter(|s| !s.is_empty());
-        self.get_by_segments(segments)
+
+        #[cfg(feature = "simd")]
+        {
+            let mut cur = 0u32;
+            let bytes = trimmed.as_bytes();
+            let mut start = 0;
+
+            for pos in memchr::memchr2_iter(b'/', b'\\', bytes) {
+                if pos > start {
+                    // SAFETY: valid utf-8 slice of verified str
+                    let seg = unsafe { core::str::from_utf8_unchecked(&bytes[start..pos]) }.trim();
+                    if !seg.is_empty() {
+                        cur = self.find_child(cur, seg)?;
+                    }
+                }
+                start = pos + 1;
+            }
+
+            if start < bytes.len() {
+                let seg = unsafe { core::str::from_utf8_unchecked(&bytes[start..]) }.trim();
+                if !seg.is_empty() {
+                    cur = self.find_child(cur, seg)?;
+                }
+            }
+
+            self.arena[cur as usize].node.as_ref()
+        }
+
+        #[cfg(not(feature = "simd"))]
+        {
+            let segments = trimmed
+                .split(['/', '\\'])
+                .map(|s| s.trim())
+                .filter(|s| !s.is_empty());
+            self.get_by_segments(segments)
+        }
     }
 
     fn find_child(&self, parent_idx: u32, segment: &str) -> Option<u32> {
