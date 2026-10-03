@@ -19,19 +19,12 @@ use std::alloc;
 #[global_allocator]
 static ALLOCATOR: Cap<alloc::System> = Cap::new(alloc::System, usize::MAX);
 
-// Read production configs from the server directory
-const PROD_GOLDSRC_TOML: &str =
-    include_str!(r"C:\Users\Administrator\Desktop\server\cstrike\addons\goldsrc\goldsrc.toml");
-const PROD_PLUGINS_TOML: &str = include_str!(
-    r"C:\Users\Administrator\Desktop\server\cstrike\addons\goldsrc\configs\plugins.toml"
-);
-const PROD_COMMON_LANG: &str = include_str!(
-    r"C:\Users\Administrator\Desktop\server\cstrike\addons\goldsrc\data\lang\common.toml"
-);
-const PROD_MODERATION_LANG: &str =
-    include_str!(r"D:\Repo\GoldSrc.rs\goldsrc-rs\plugins\moderation\lang\moderation.toml");
-const PROD_MODERATION_BUNDLE: &str =
-    include_str!(r"D:\Repo\GoldSrc.rs\goldsrc-rs\plugins\moderation\bundle.toml");
+// Read production configs from benchmark fixtures
+const PROD_GOLDSRC_TOML: &str = include_str!("fixtures/goldsrc.toml");
+const PROD_PLUGINS_TOML: &str = include_str!("fixtures/plugins.toml");
+const PROD_COMMON_LANG: &str = include_str!("fixtures/common.toml");
+const PROD_MODERATION_LANG: &str = include_str!("fixtures/moderation.toml");
+const PROD_MODERATION_BUNDLE: &str = include_str!("fixtures/bundle.toml");
 
 fn bench_real_server_workloads(c: &mut Criterion) {
     let mut group = c.benchmark_group("real_server_prod_workload");

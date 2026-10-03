@@ -1,0 +1,15 @@
+[core]
+mod_dir = "cstrike"
+plugins_dir = "cstrike/addons/goldsrc/plugins"
+configs_dir = "cstrike/addons/goldsrc/configs"
+logs_dir = "cstrike/addons/goldsrc/logs"
+
+[wasm]
+hot_reload = false
+config_watcher = false
+
+[logging]
+level = "info"
+file_output = true
+console_output = true
+targets = []
