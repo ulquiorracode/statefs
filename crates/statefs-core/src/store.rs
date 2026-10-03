@@ -9,7 +9,14 @@ use alloc::vec::Vec;
 /// Primitive storage contract for hierarchical state trees.
 pub trait Store {
     /// Retrieves a reference to the node at the specified path, if present.
-    fn get(&self, path: &Path) -> Option<&Node>;
+    fn get(&self, path: &Path) -> Option<&Node> {
+        self.get_by_segments(path.segments().iter().map(|s| s.as_str()))
+    }
+
+    /// Zero-allocation lookup by arbitrary string segment iterator.
+    fn get_by_segments<'a, I>(&self, segments: I) -> Option<&Node>
+    where
+        I: IntoIterator<Item = &'a str>;
 
     /// Inserts a new value at the specified path.
     ///

@@ -46,12 +46,25 @@ impl MemStore {
         self.root = TrieNode::default();
         self.global_revision = self.global_revision.saturating_add(1);
     }
+
+    /// Zero-allocation lookup by raw string path with `/` or `\` separators.
+    pub fn get_str(&self, raw_path: &str) -> Option<&Node> {
+        let trimmed = raw_path.trim();
+        let segments = trimmed
+            .split(['/', '\\'])
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty());
+        self.get_by_segments(segments)
+    }
 }
 
 impl Store for MemStore {
-    fn get(&self, path: &Path) -> Option<&Node> {
+    fn get_by_segments<'a, I>(&self, segments: I) -> Option<&Node>
+    where
+        I: IntoIterator<Item = &'a str>,
+    {
         let mut cur = &self.root;
-        for seg in path.segments() {
+        for seg in segments {
             cur = cur.children.get(seg)?;
         }
         cur.node.as_ref()

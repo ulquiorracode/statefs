@@ -39,10 +39,18 @@ fn bench_memstore_operations(c: &mut Criterion) {
     }
 
     let target_path = &paths[500];
+    let target_raw_str = "/services/worker_500/config/concurrency";
 
     group.bench_function("get_existing_node", |b| {
         b.iter(|| {
             let node = store.get(black_box(target_path));
+            black_box(node);
+        })
+    });
+
+    group.bench_function("get_str_zero_alloc", |b| {
+        b.iter(|| {
+            let node = store.get_str(black_box(target_raw_str));
             black_box(node);
         })
     });
