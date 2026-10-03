@@ -131,14 +131,19 @@ impl MemStore {
 
     /// Zero-allocation lookup by raw string path with `/` or `\` separators.
     pub fn get_str(&self, raw_path: &str) -> Option<&Node> {
+        self.find_node_id(raw_path)
+            .and_then(|id| self.get_by_id(id))
+    }
+
+    /// Resolves the raw path string to an internal 32-bit arena node ID.
+    pub fn find_node_id(&self, raw_path: &str) -> Option<u32> {
         let trimmed = raw_path.trim();
+        let mut cur = 0u32;
 
         #[cfg(feature = "simd")]
         {
-            let mut cur = 0u32;
             let bytes = trimmed.as_bytes();
             let mut start = 0;
-
             for pos in memchr::memchr2_iter(b'/', b'\\', bytes) {
                 if pos > start {
                     // SAFETY: valid utf-8 slice of verified str
@@ -156,18 +161,32 @@ impl MemStore {
                     cur = self.find_child(cur, seg)?;
                 }
             }
-
-            self.arena[cur as usize].node.as_ref()
         }
 
         #[cfg(not(feature = "simd"))]
         {
-            let segments = trimmed
+            for seg in trimmed
                 .split(['/', '\\'])
                 .map(|s| s.trim())
-                .filter(|s| !s.is_empty());
-            self.get_by_segments(segments)
+                .filter(|s| !s.is_empty())
+            {
+                cur = self.find_child(cur, seg)?;
+            }
         }
+
+        if self.arena[cur as usize].node.is_some() {
+            Some(cur)
+        } else {
+            None
+        }
+    }
+
+    /// Direct O(1) lookup of a node by its 32-bit arena index.
+    #[inline(always)]
+    pub fn get_by_id(&self, node_id: u32) -> Option<&Node> {
+        self.arena
+            .get(node_id as usize)
+            .and_then(|an| an.node.as_ref())
     }
 
     fn find_child(&self, parent_idx: u32, segment: &str) -> Option<u32> {

@@ -1,6 +1,6 @@
 [workspace]
 members = [
-    "crates/statefs-core",
+    "crates/statefs-core", "crates/statefs-opt",
 ]
 resolver = "3"
 

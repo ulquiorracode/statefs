@@ -1,0 +1,30 @@
+[package]
+name = "statefs-opt"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Optimization adapters, passports, and scenario resolvers for StateFS"
+keywords = ["optimization", "cache", "simd", "performance", "passport"]
+categories = ["data-structures", "no-std"]
+autobenches = false
+
+[features]
+default = ["std", "simd"]
+std = ["statefs-core/std"]
+simd = ["dep:memchr"]
+bench = ["dep:config", "dep:toml", "dep:cap", "std"]
+
+[dependencies]
+statefs-core = { path = "../statefs-core", default-features = false }
+stitch-rs = { path = "../../../stitch-rs", default-features = false }
+memchr = { version = "2.7", default-features = false, optional = true }
+config = { version = "0.14", default-features = false, features = ["toml"], optional = true }
+toml = { version = "0.8", optional = true }
+cap = { version = "0.1", optional = true }
+
+[[bin]]
+name = "matrix_bench"
+path = "benches/matrix_bench.rs"
+required-features = ["bench"]

@@ -17,3 +17,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Real-world production server benchmarks comparing StateFS vs `config-rs`.
 - Portable benchmark test fixtures under `benches/fixtures`.
 - Automated GitHub Actions CI workflow covering test suite, clippy, and code formatting.
+- `statefs-opt` crate: modular optimization adapters, passports, and scenario resolvers.
+- `Passport` & `Visa` admission control contracts decouples optimization adapters from core storage.
+- `L1PathCache<const CAP: usize>`: inline compile-time bounded direct-mapped L1 cache.
+- `SimdScanner`: vector-accelerated path segment scanning.
+- `QueryScenarioResolver`: first-level policy regulator directing queries according to task scenarios (`BootLoading`, `SteadyStateLoop`).
+- `stitch-rs` integration bridge: `StateFsTerminal` and monomorphic pipeline execution.
+- Multi-candidate unified matrix benchmark (`matrix_bench`) comparing 5 optimization tiers across scales.
