@@ -16,14 +16,16 @@
 
 extern crate alloc;
 
+pub mod cqs;
 pub mod intent;
 pub mod layer;
 pub mod machine;
 pub mod store_terminal;
 
+pub use cqs::{Command, Query};
 pub use intent::{Admission, Refusal, StateIntent, StateOutcome};
-pub use layer::{Layer, Terminal};
-pub use machine::{Machine, StitchChain};
+pub use layer::{Layer, Middleware, Terminal, TerminalHandler};
+pub use machine::{Machine, Pipeline, StackNode, StitchChain, TerminalNode};
 pub use store_terminal::StoreTerminal;
 
 #[cfg(test)]

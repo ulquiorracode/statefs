@@ -3,8 +3,49 @@
 use alloc::borrow::ToOwned;
 use alloc::string::String;
 use alloc::vec::Vec;
-use core::fmt;
+use core::fmt::{self, Display, Formatter};
 use core::str::FromStr;
+
+/// Configuration options for parsing hierarchical paths.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PathOptions<'a> {
+    /// Separator characters dividing segments (e.g., `&['/', '\\']`).
+    pub separators: &'a [char],
+    /// Whether to trim leading/trailing whitespace around each segment.
+    pub trim_segments: bool,
+    /// Whether to ignore empty segments resulting from consecutive separators (e.g., `//` -> `/`).
+    pub ignore_empty: bool,
+}
+
+impl PathOptions<'static> {
+    /// Standard URI/Unix file path separators: `/` and `\`.
+    pub const DEFAULT: Self = Self {
+        separators: &['/', '\\'],
+        trim_segments: true,
+        ignore_empty: true,
+    };
+
+    /// Dot-separated property notation: `.`.
+    pub const DOT_NOTATION: Self = Self {
+        separators: &['.'],
+        trim_segments: true,
+        ignore_empty: true,
+    };
+
+    /// Comprehensive separators including dots: `/`, `\`, `.`.
+    pub const PERMISSIVE: Self = Self {
+        separators: &['/', '\\', '.'],
+        trim_segments: true,
+        ignore_empty: true,
+    };
+}
+
+impl Default for PathOptions<'static> {
+    #[inline]
+    fn default() -> Self {
+        Self::DEFAULT
+    }
+}
 
 /// A canonical, OS-independent segmented path in the StateFS hierarchy.
 ///
@@ -39,16 +80,27 @@ impl Path {
         Self { segments }
     }
 
-    /// Parses a raw string path into a canonical `Path`.
-    ///
-    /// Supports `/`, `\`, and `.` separators (e.g., `/plugins/moderation.cvars/timeout`).
+    /// Parses a raw string path using standard path separators (`/` and `\`).
     pub fn parse(raw: &str) -> Self {
-        let mut segments = Vec::new();
-        let normalized = raw.trim();
+        Self::parse_with_options(raw, &PathOptions::DEFAULT)
+    }
 
-        for part in normalized.split(['/', '\\', '.']) {
-            let seg = part.trim();
-            if !seg.is_empty() {
+    /// Parses a raw string path using explicit parsing options and separators.
+    pub fn parse_with_options(raw: &str, options: &PathOptions) -> Self {
+        let mut segments = Vec::new();
+        let normalized = if options.trim_segments {
+            raw.trim()
+        } else {
+            raw
+        };
+
+        for part in normalized.split(options.separators) {
+            let seg = if options.trim_segments {
+                part.trim()
+            } else {
+                part
+            };
+            if !options.ignore_empty || !seg.is_empty() {
                 segments.push(seg.to_owned());
             }
         }
@@ -130,8 +182,8 @@ impl Path {
     }
 }
 
-impl fmt::Display for Path {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl Display for Path {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         if self.is_root() {
             return write!(f, "/");
         }
@@ -175,7 +227,10 @@ mod tests {
         );
         assert_eq!(p1.to_string(), "/plugins/moderation/cvars/ban_time");
 
-        let p2 = Path::parse("plugins.moderation.errors.not_found");
+        let p2 = Path::parse_with_options(
+            "plugins.moderation.errors.not_found",
+            &PathOptions::DOT_NOTATION,
+        );
         assert_eq!(
             p2.segments(),
             &["plugins", "moderation", "errors", "not_found"]

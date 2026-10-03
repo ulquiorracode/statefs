@@ -2,6 +2,8 @@
 
 use crate::path::Path;
 use alloc::string::String;
+use core::error::Error;
+use core::fmt::{Display, Formatter, Result};
 
 /// Core errors emitted by StateFS store operations.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -16,8 +18,8 @@ pub enum StoreError {
     Conflict(String),
 }
 
-impl core::fmt::Display for StoreError {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+impl Display for StoreError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
         match self {
             Self::NotFound(p) => write!(f, "Node not found at path: {p}"),
             Self::ReadOnly(p) => write!(f, "Cannot mutate read-only node at path: {p}"),
@@ -28,4 +30,4 @@ impl core::fmt::Display for StoreError {
 }
 
 #[cfg(feature = "std")]
-impl std::error::Error for StoreError {}
+impl Error for StoreError {}

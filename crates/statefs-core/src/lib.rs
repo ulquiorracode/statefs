@@ -27,7 +27,7 @@ pub mod value;
 pub use error::StoreError;
 pub use mem::MemStore;
 pub use node::Node;
-pub use path::Path;
+pub use path::{Path, PathOptions};
 pub use store::Store;
 pub use value::Value;
 

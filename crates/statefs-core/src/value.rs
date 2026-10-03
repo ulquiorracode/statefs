@@ -4,7 +4,7 @@ use alloc::borrow::ToOwned;
 use alloc::collections::BTreeMap;
 use alloc::string::String;
 use alloc::vec::Vec;
-use core::fmt;
+use core::fmt::{Display, Formatter, Result};
 
 /// Universal strongly-typed value variant stored in a StateFS node.
 #[derive(Debug, Clone, PartialEq)]
@@ -92,8 +92,8 @@ impl Value {
     }
 }
 
-impl fmt::Display for Value {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl Display for Value {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
         match self {
             Self::Null => write!(f, "null"),
             Self::Bool(b) => write!(f, "{b}"),

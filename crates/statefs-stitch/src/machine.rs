@@ -105,4 +105,24 @@ where
     pub fn stitch(&mut self, ctx: &mut TCtx, intent: TIntent) -> Result<TOutcome, Refusal> {
         self.chain.cycle(ctx, intent)
     }
+
+    /// Standard industry alias for executing an intent through the pipeline.
+    #[inline(always)]
+    pub fn dispatch(&mut self, ctx: &mut TCtx, intent: TIntent) -> Result<TOutcome, Refusal> {
+        self.stitch(ctx, intent)
+    }
+
+    /// Wraps with a middleware layer using standard pipeline terminology.
+    pub fn use_middleware<L>(
+        self,
+        middleware: L,
+    ) -> Machine<TCtx, TIntent, TOutcome, StackNode<L, TChain>>
+    where
+        L: Layer<TCtx, TIntent, TOutcome>,
+    {
+        self.wrap(middleware)
+    }
 }
+
+/// Standard industry alias for Machine.
+pub type Pipeline<TCtx, TIntent, TOutcome, TChain> = Machine<TCtx, TIntent, TOutcome, TChain>;
