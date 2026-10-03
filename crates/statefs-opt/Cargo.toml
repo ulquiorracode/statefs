@@ -18,7 +18,7 @@ bench = ["dep:config", "dep:toml", "dep:cap", "std"]
 
 [dependencies]
 statefs-core = { path = "../statefs-core", default-features = false }
-stitch-rs = { path = "../../../stitch-rs", default-features = false }
+stitch-rs = { git = "https://github.com/ulquiorracode/stitch-rs.git", branch = "main", default-features = false }
 memchr = { version = "2.7", default-features = false, optional = true }
 config = { version = "0.14", default-features = false, features = ["toml"], optional = true }
 toml = { version = "0.8", optional = true }
