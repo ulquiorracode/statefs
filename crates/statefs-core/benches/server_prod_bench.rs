@@ -12,7 +12,7 @@
 //! 3. Hot-path game tick / network packet query latency.
 
 use cap::Cap;
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use criterion::{Criterion, black_box, criterion_group, criterion_main};
 use statefs_core::{MemStore, Path, Store, Value};
 use std::alloc;
 
@@ -20,11 +20,18 @@ use std::alloc;
 static ALLOCATOR: Cap<alloc::System> = Cap::new(alloc::System, usize::MAX);
 
 // Read production configs from the server directory
-const PROD_GOLDSRC_TOML: &str = include_str!(r"C:\Users\Administrator\Desktop\server\cstrike\addons\goldsrc\goldsrc.toml");
-const PROD_PLUGINS_TOML: &str = include_str!(r"C:\Users\Administrator\Desktop\server\cstrike\addons\goldsrc\configs\plugins.toml");
-const PROD_COMMON_LANG: &str = include_str!(r"C:\Users\Administrator\Desktop\server\cstrike\addons\goldsrc\data\lang\common.toml");
-const PROD_MODERATION_LANG: &str = include_str!(r"D:\Repo\GoldSrc.rs\goldsrc-rs\plugins\moderation\lang\moderation.toml");
-const PROD_MODERATION_BUNDLE: &str = include_str!(r"D:\Repo\GoldSrc.rs\goldsrc-rs\plugins\moderation\bundle.toml");
+const PROD_GOLDSRC_TOML: &str =
+    include_str!(r"C:\Users\Administrator\Desktop\server\cstrike\addons\goldsrc\goldsrc.toml");
+const PROD_PLUGINS_TOML: &str = include_str!(
+    r"C:\Users\Administrator\Desktop\server\cstrike\addons\goldsrc\configs\plugins.toml"
+);
+const PROD_COMMON_LANG: &str = include_str!(
+    r"C:\Users\Administrator\Desktop\server\cstrike\addons\goldsrc\data\lang\common.toml"
+);
+const PROD_MODERATION_LANG: &str =
+    include_str!(r"D:\Repo\GoldSrc.rs\goldsrc-rs\plugins\moderation\lang\moderation.toml");
+const PROD_MODERATION_BUNDLE: &str =
+    include_str!(r"D:\Repo\GoldSrc.rs\goldsrc-rs\plugins\moderation\bundle.toml");
 
 fn bench_real_server_workloads(c: &mut Criterion) {
     let mut group = c.benchmark_group("real_server_prod_workload");
@@ -102,11 +109,26 @@ fn bench_real_server_workloads(c: &mut Criterion) {
 
     // Pre-build config-rs instance with real server configs
     let config_rs_prod = config::Config::builder()
-        .add_source(config::File::from_str(PROD_GOLDSRC_TOML, config::FileFormat::Toml))
-        .add_source(config::File::from_str(PROD_PLUGINS_TOML, config::FileFormat::Toml))
-        .add_source(config::File::from_str(PROD_COMMON_LANG, config::FileFormat::Toml))
-        .add_source(config::File::from_str(PROD_MODERATION_LANG, config::FileFormat::Toml))
-        .add_source(config::File::from_str(PROD_MODERATION_BUNDLE, config::FileFormat::Toml))
+        .add_source(config::File::from_str(
+            PROD_GOLDSRC_TOML,
+            config::FileFormat::Toml,
+        ))
+        .add_source(config::File::from_str(
+            PROD_PLUGINS_TOML,
+            config::FileFormat::Toml,
+        ))
+        .add_source(config::File::from_str(
+            PROD_COMMON_LANG,
+            config::FileFormat::Toml,
+        ))
+        .add_source(config::File::from_str(
+            PROD_MODERATION_LANG,
+            config::FileFormat::Toml,
+        ))
+        .add_source(config::File::from_str(
+            PROD_MODERATION_BUNDLE,
+            config::FileFormat::Toml,
+        ))
         .build()
         .unwrap();
 
@@ -123,7 +145,9 @@ fn bench_real_server_workloads(c: &mut Criterion) {
     group.bench_function("statefs/query_plugin_priority_zero_alloc", |b| {
         b.iter(|| {
             let val = statefs_prod
-                .get_str(black_box("/bundles/moderation/components/moderation/priority"))
+                .get_str(black_box(
+                    "/bundles/moderation/components/moderation/priority",
+                ))
                 .unwrap()
                 .value
                 .as_int()
@@ -163,11 +187,26 @@ fn bench_real_server_workloads(c: &mut Criterion) {
 fn print_memory_footprint() {
     let before_config = ALLOCATOR.allocated();
     let _conf = config::Config::builder()
-        .add_source(config::File::from_str(PROD_GOLDSRC_TOML, config::FileFormat::Toml))
-        .add_source(config::File::from_str(PROD_PLUGINS_TOML, config::FileFormat::Toml))
-        .add_source(config::File::from_str(PROD_COMMON_LANG, config::FileFormat::Toml))
-        .add_source(config::File::from_str(PROD_MODERATION_LANG, config::FileFormat::Toml))
-        .add_source(config::File::from_str(PROD_MODERATION_BUNDLE, config::FileFormat::Toml))
+        .add_source(config::File::from_str(
+            PROD_GOLDSRC_TOML,
+            config::FileFormat::Toml,
+        ))
+        .add_source(config::File::from_str(
+            PROD_PLUGINS_TOML,
+            config::FileFormat::Toml,
+        ))
+        .add_source(config::File::from_str(
+            PROD_COMMON_LANG,
+            config::FileFormat::Toml,
+        ))
+        .add_source(config::File::from_str(
+            PROD_MODERATION_LANG,
+            config::FileFormat::Toml,
+        ))
+        .add_source(config::File::from_str(
+            PROD_MODERATION_BUNDLE,
+            config::FileFormat::Toml,
+        ))
         .build()
         .unwrap();
     let config_rs_bytes = ALLOCATOR.allocated() - before_config;
@@ -190,8 +229,16 @@ fn print_memory_footprint() {
     println!("\n=======================================================");
     println!("     REAL SERVER PRODUCTION MEMORY USAGE BREAKDOWN      ");
     println!("=======================================================");
-    println!("  -> config-rs Resident Heap  : {:>8} bytes ({:.2} KB)", config_rs_bytes, config_rs_bytes as f64 / 1024.0);
-    println!("  -> StateFS Resident Heap    : {:>8} bytes ({:.2} KB)", statefs_bytes, statefs_bytes as f64 / 1024.0);
+    println!(
+        "  -> config-rs Resident Heap  : {:>8} bytes ({:.2} KB)",
+        config_rs_bytes,
+        config_rs_bytes as f64 / 1024.0
+    );
+    println!(
+        "  -> StateFS Resident Heap    : {:>8} bytes ({:.2} KB)",
+        statefs_bytes,
+        statefs_bytes as f64 / 1024.0
+    );
     println!("=======================================================\n");
 }
 
@@ -228,7 +275,9 @@ fn flatten_toml_to_statefs(store: &mut MemStore, current_path: &Path, val: &toml
             store.insert(current_path, Value::Array(vals)).unwrap();
         }
         toml::Value::Datetime(dt) => {
-            store.insert(current_path, Value::from(dt.to_string())).unwrap();
+            store
+                .insert(current_path, Value::from(dt.to_string()))
+                .unwrap();
         }
     }
 }
