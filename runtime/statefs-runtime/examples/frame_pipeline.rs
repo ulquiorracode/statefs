@@ -140,6 +140,12 @@ pub struct HostFrameTerminal {
 }
 
 impl HostFrameTerminal {
+    /// Pre-resolves direct O(1) [`PathHandle`]s for hot-loop execution.
+    ///
+    /// # Invariants & Preconditions
+    /// Pinned handles remain valid as long as target CVAR nodes are not removed or cleared
+    /// from the store. Mutations that update existing values preserve node indices, while
+    /// structural deletions (`remove`/`clear`) require re-resolving handles.
     pub fn new(store: MemStore) -> Self {
         let h_tickrate = store
             .resolve_handle("/server/net/tickrate")
@@ -298,6 +304,11 @@ fn main() {
     println!("Total frame dispatches: {}", ctx.total_dispatches);
     println!("Total simulated ticks:  {}", ctx.total_simulated_ticks);
     println!("Clamped lag spikes:     {}", ctx.clamped_frames);
-    println!("Average U-cycle latency: {:.2} ns / dispatch", avg_latency);
-    println!("StateFS + stitch-rs integration verified with 0 heap allocations!");
+    println!(
+        "Average frame cycle latency (includes Instant timer): {:.2} ns / dispatch",
+        avg_latency
+    );
+    println!(
+        "StateFS + stitch-rs integration verified (zero per-frame path lookups/allocations in terminal path)."
+    );
 }
