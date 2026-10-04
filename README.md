@@ -108,12 +108,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 The StateFS ecosystem is structured around decoupled, zero-cost modular domains:
 
 - **Core (`core/`)**:
-  - **[`statefs-core`](core/statefs-core)**: Pure `no_std` nanokernel (Arena Trie, StringPool, Path, Value, Storage Ports).
+  - **[`statefs-core`](core/statefs-core)**: Pure `no_std` nanokernel (Arena Trie, StringPool, Path, Value, Storage Ports, Subtree Revision, `SubtreeWatcher`, Glob matching).
 - **Runtime (`runtime/`)**:
-  - **[`statefs-runtime`](runtime/statefs-runtime)**: Orchestration engine, scenario resolvers, and `stitch-rs` U-cycle pipeline integration.
+  - **[`statefs-runtime`](runtime/statefs-runtime)**: Orchestration engine, scenario resolvers, `stitch-rs` U-cycle pipeline integration, and production examples.
 - **Codecs (`codecs/`)**:
   - **[`statefs-codec-toml`](codecs/statefs-codec-toml)**: Streaming TOML ingestion and tree serializer.
+  - **[`statefs-codec-json`](codecs/statefs-codec-json)**: Streaming JSON ingestion and tree exporter.
   - **[`statefs-codec-bin`](codecs/statefs-codec-bin)**: Flat binary image exporter for instant disk restoration.
+- **Path Optimization Adapters (`adapters/path/`)**:
+  - **[`statefs-adapter-path-core`](adapters/path/statefs-adapter-path-core)**: `PathOptimizer` trait port, zero-alloc `InlinePath`, and recursive fractal `PathOptimizerHub`.
+  - **[`statefs-adapter-path-tokens`](adapters/path/statefs-adapter-path-tokens)**: High-frequency prefix compression dictionary (`PrefixTokenizer`).
+  - **[`statefs-adapter-path-handles`](adapters/path/statefs-adapter-path-handles)**: Direct-mapped direct arena index cache (`PathHandleCache`) bypassing string parsing.
 - **Optimization Adapters (`adapters/opt/`)**:
   - **[`statefs-adapter-opt-cache`](adapters/opt/statefs-adapter-opt-cache)**: Compile-time bounded L1 Direct-Mapped inline path cache.
   - **[`statefs-adapter-opt-simd`](adapters/opt/statefs-adapter-opt-simd)**: AVX2 / SSE4.2 SIMD path segment scanner via `memchr2`.
@@ -125,6 +130,25 @@ The StateFS ecosystem is structured around decoupled, zero-cost modular domains:
   - **[`statefs-adapter-compute-rayon`](adapters/compute/statefs-adapter-compute-rayon)**: Thread-pool parallel batch queries via `rayon`.
 - **Benchmarks (`benches/`)**:
   - **[`matrix_bench`](benches/matrix_bench)**: Multi-candidate benchmark grid comparing all optimization tiers.
+
+---
+
+## Runnable Production Examples
+
+StateFS includes complete, real-world runnable examples under [`runtime/statefs-runtime/examples/`](runtime/statefs-runtime/examples):
+
+- **`game_server_cvars`**: High-performance game server engine state registry with `PathHandle` lookups, `SubtreeWatcher` for physics tick invalidation, and lock-free SPSC WAL replication.
+  ```bash
+  cargo run -p statefs-runtime --example game_server_cvars
+  ```
+- **`zero_copy_snapshot`**: Instant cold boot via flat binary snapshot export and zero-copy `mmap` backing in under 50 microseconds with zero heap allocation.
+  ```bash
+  cargo run -p statefs-runtime --example zero_copy_snapshot
+  ```
+- **`reactive_watch`**: Subtree revision tracking and glob-based search (`*` and `**`) across virtual configuration hierarchies.
+  ```bash
+  cargo run -p statefs-runtime --example reactive_watch
+  ```
 
 ---
 

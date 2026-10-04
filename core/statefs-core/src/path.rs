@@ -47,6 +47,13 @@ impl Default for PathOptions<'static> {
     }
 }
 
+/// A direct 32-bit handle to an interned node in the StateFS arena.
+///
+/// Provides true O(1) access (2-3 ns) without string hashing or path traversal.
+#[repr(transparent)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct PathHandle(pub u32);
+
 /// A canonical, OS-independent segmented path in the StateFS hierarchy.
 ///
 /// Paths are always composed of clean UTF-8 string segments and are free

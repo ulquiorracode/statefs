@@ -23,6 +23,7 @@ impl SimdPathScanner {
         F: FnMut(&'a str) -> bool,
     {
         let trimmed = path.trim();
+        #[cfg(feature = "simd")]
         let bytes = trimmed.as_bytes();
 
         #[cfg(feature = "simd")]

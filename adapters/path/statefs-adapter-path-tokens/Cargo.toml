@@ -1,0 +1,18 @@
+[package]
+name = "statefs-adapter-path-tokens"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Dictionary prefix tokenization and compression adapter for StateFS paths"
+keywords = ["path", "tokens", "dictionary", "compression", "adapter"]
+categories = ["data-structures", "no-std"]
+
+[dependencies]
+statefs-core = { path = "../../../core/statefs-core" }
+statefs-adapter-path-core = { path = "../statefs-adapter-path-core" }
+
+[features]
+default = ["std"]
+std = ["statefs-core/std", "statefs-adapter-path-core/std"]

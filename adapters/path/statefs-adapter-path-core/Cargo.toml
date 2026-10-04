@@ -1,0 +1,17 @@
+[package]
+name = "statefs-adapter-path-core"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Core trait ports and composite hub for StateFS path optimization adapters"
+keywords = ["path", "optimizer", "codec", "port", "hub"]
+categories = ["data-structures", "no-std"]
+
+[dependencies]
+statefs-core = { path = "../../../core/statefs-core" }
+
+[features]
+default = ["std"]
+std = ["statefs-core/std"]

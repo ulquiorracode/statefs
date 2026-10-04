@@ -27,5 +27,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `statefs-adapter-opt-mmap`: zero-copy `memmap2` and `zerocopy` physical storage backing.
 - `statefs-adapter-opt-lockfree`: lock-free SPSC continuous BipBuffer WAL mutation stream adapter via `bbqueue`.
 - `statefs-adapter-bridge-config`: drop-in high-performance compatibility bridge for `config-rs`.
-- `statefs-adapter-compute-rayon`: thread-pool parallel batch query executor via `rayon`.
+- `statefs-codec-json`: streaming hierarchical JSON ingestion and serializer for symmetric interoperability.
+- `statefs-adapter-path-core`: `PathOptimizer` trait port, stack-allocated `InlinePath`, and fractal `PathOptimizerHub` allowing arbitrary nested step composition.
+- `statefs-adapter-path-tokens`: dictionary prefix compressor and expander (`PrefixTokenizer`) for high-frequency path prefixes.
+- `statefs-adapter-path-handles`: direct-mapped index cache (`PathHandleCache`) bypassing string parsing in hot loops.
+- `PathHandle(pub u32)` for direct O(1) index access to arena nodes in 2-3 ns.
+- Subtree revision tracking (`subtree_revision: u64`) with cascading updates and zero-cost O(1) `SubtreeWatcher`.
+- Glob pattern matching (`find_glob`) with support for single `*` and recursive `**` wildcards.
+- Production runnable examples under `runtime/statefs-runtime/examples/`: `game_server_cvars`, `zero_copy_snapshot`, and `reactive_watch`.
 - `matrix_bench`: multi-candidate unified matrix benchmark grid comparing 7 tiers across scales and measuring cold boot / WAL throughput.

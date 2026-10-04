@@ -22,7 +22,7 @@ const NULL_IDX: u32 = u32::MAX;
 
 /// An interned string identifier within the [`StringPool`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-struct Symbol(u32);
+pub(crate) struct Symbol(pub(crate) u32);
 
 /// Deduplicating string pool to eliminate redundant segment allocations.
 #[derive(Default, Clone, Debug)]
@@ -67,11 +67,12 @@ impl StringPool {
 /// - `first_child`: points to the first child node.
 /// - `next_sibling`: points to the next sibling sharing the same parent.
 #[derive(Clone, Debug)]
-struct ArenaNode {
-    symbol: Symbol,
-    node: Option<Node>,
-    first_child: u32,
-    next_sibling: u32,
+pub(crate) struct ArenaNode {
+    pub(crate) symbol: Symbol,
+    pub(crate) node: Option<Node>,
+    pub(crate) first_child: u32,
+    pub(crate) next_sibling: u32,
+    pub(crate) subtree_revision: u64,
 }
 
 impl ArenaNode {
@@ -81,6 +82,7 @@ impl ArenaNode {
             node: None,
             first_child: NULL_IDX,
             next_sibling: NULL_IDX,
+            subtree_revision: 0,
         }
     }
 }
@@ -120,6 +122,25 @@ impl MemStore {
         self.global_revision
     }
 
+    /// Returns the monotonic revision of the subtree rooted at `path`.
+    pub fn subtree_revision(&self, path: &Path) -> Option<u64> {
+        let mut cur = 0u32;
+        for seg in path.segments() {
+            cur = self.find_child(cur, seg)?;
+        }
+        Some(self.arena[cur as usize].subtree_revision)
+    }
+
+    /// Returns the monotonic revision of the subtree rooted at `raw_path`.
+    pub fn subtree_revision_str(&self, raw_path: &str) -> Option<u64> {
+        let trimmed = raw_path.trim();
+        if trimmed.is_empty() || trimmed == "/" {
+            return Some(self.global_revision);
+        }
+        let node_id = self.find_arena_index(trimmed)?;
+        Some(self.arena[node_id as usize].subtree_revision)
+    }
+
     /// Clears all nodes from the store.
     pub fn clear(&mut self) {
         self.arena.clear();
@@ -127,6 +148,7 @@ impl MemStore {
         let root_symbol = self.pool.intern("");
         self.arena.push(ArenaNode::new(root_symbol));
         self.global_revision = self.global_revision.saturating_add(1);
+        self.arena[0].subtree_revision = self.global_revision;
     }
 
     /// Zero-allocation lookup by raw string path with `/` or `\` separators.
@@ -135,9 +157,34 @@ impl MemStore {
             .and_then(|id| self.get_by_id(id))
     }
 
-    /// Resolves the raw path string to an internal 32-bit arena node ID.
+    /// Resolves a path string to a permanent O(1) [`PathHandle`].
+    #[inline]
+    pub fn resolve_handle(&self, raw_path: &str) -> Option<crate::path::PathHandle> {
+        self.find_node_id(raw_path).map(crate::path::PathHandle)
+    }
+
+    /// Fetches a node directly by its [`PathHandle`] in true O(1) (2-3 ns) without path parsing.
+    #[inline(always)]
+    pub fn get_by_handle(&self, handle: crate::path::PathHandle) -> Option<&Node> {
+        self.get_by_id(handle.0)
+    }
+
+    /// Resolves the raw path string to an internal 32-bit arena node ID, if it contains a value.
     pub fn find_node_id(&self, raw_path: &str) -> Option<u32> {
+        let idx = self.find_arena_index(raw_path)?;
+        if self.arena[idx as usize].node.is_some() {
+            Some(idx)
+        } else {
+            None
+        }
+    }
+
+    /// Resolves any valid path (intermediate directory or leaf) to its 32-bit arena index.
+    pub fn find_arena_index(&self, raw_path: &str) -> Option<u32> {
         let trimmed = raw_path.trim();
+        if trimmed.is_empty() || trimmed == "/" {
+            return Some(0);
+        }
         let mut cur = 0u32;
 
         #[cfg(feature = "simd")]
@@ -174,11 +221,12 @@ impl MemStore {
             }
         }
 
-        if self.arena[cur as usize].node.is_some() {
-            Some(cur)
-        } else {
-            None
-        }
+        Some(cur)
+    }
+
+    /// Queries the tree with a pattern supporting `*` and `**` wildcards.
+    pub fn find_glob(&self, pattern: &str) -> Vec<(Path, &Node)> {
+        crate::glob::match_glob(self, pattern)
     }
 
     /// Direct O(1) lookup of a node by its 32-bit arena index.
@@ -187,6 +235,22 @@ impl MemStore {
         self.arena
             .get(node_id as usize)
             .and_then(|an| an.node.as_ref())
+    }
+
+    pub(crate) fn node_symbol_str(&self, idx: u32) -> &str {
+        self.pool.resolve(self.arena[idx as usize].symbol)
+    }
+
+    pub(crate) fn node_first_child(&self, idx: u32) -> u32 {
+        self.arena[idx as usize].first_child
+    }
+
+    pub(crate) fn node_next_sibling(&self, idx: u32) -> u32 {
+        self.arena[idx as usize].next_sibling
+    }
+
+    pub(crate) fn node_value(&self, idx: u32) -> Option<&Node> {
+        self.arena[idx as usize].node.as_ref()
     }
 
     fn find_child(&self, parent_idx: u32, segment: &str) -> Option<u32> {
@@ -216,6 +280,8 @@ impl Store for MemStore {
 
     fn insert_node(&mut self, path: &Path, mut node: Node) -> Result<Option<Node>, StoreError> {
         let mut cur = 0u32;
+        let mut path_indices = Vec::with_capacity(8);
+        path_indices.push(0);
 
         for seg in path.segments() {
             if let Some(child_idx) = self.find_child(cur, seg) {
@@ -234,10 +300,10 @@ impl Store for MemStore {
 
                 cur = new_idx;
             }
+            path_indices.push(cur);
         }
 
-        let target = &mut self.arena[cur as usize];
-        if let Some(existing) = &target.node {
+        if let Some(existing) = &self.arena[cur as usize].node {
             if existing.readonly {
                 return Err(StoreError::ReadOnly(path.clone()));
             }
@@ -245,29 +311,39 @@ impl Store for MemStore {
         }
 
         self.global_revision = self.global_revision.saturating_add(1);
-        let old = target.node.replace(node);
+        for &idx in &path_indices {
+            self.arena[idx as usize].subtree_revision = self.global_revision;
+        }
+
+        let old = self.arena[cur as usize].node.replace(node);
         Ok(old)
     }
 
     fn remove(&mut self, path: &Path) -> Result<Option<Node>, StoreError> {
         let mut cur = 0u32;
+        let mut path_indices = Vec::with_capacity(8);
+        path_indices.push(0);
+
         for seg in path.segments() {
             let Some(next) = self.find_child(cur, seg) else {
                 return Ok(None);
             };
             cur = next;
+            path_indices.push(cur);
         }
 
-        let target = &mut self.arena[cur as usize];
-        if let Some(existing) = &target.node
+        if let Some(existing) = &self.arena[cur as usize].node
             && existing.readonly
         {
             return Err(StoreError::ReadOnly(path.clone()));
         }
 
-        let old = target.node.take();
+        let old = self.arena[cur as usize].node.take();
         if old.is_some() {
             self.global_revision = self.global_revision.saturating_add(1);
+            for &idx in &path_indices {
+                self.arena[idx as usize].subtree_revision = self.global_revision;
+            }
         }
         Ok(old)
     }

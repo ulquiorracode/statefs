@@ -1,0 +1,18 @@
+[package]
+name = "statefs-adapter-path-handles"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "O(1) Direct PathHandle resolution and caching adapter for StateFS"
+keywords = ["path", "handle", "cache", "direct-access", "adapter"]
+categories = ["data-structures", "no-std"]
+
+[dependencies]
+statefs-core = { path = "../../../core/statefs-core" }
+statefs-adapter-path-core = { path = "../statefs-adapter-path-core" }
+
+[features]
+default = ["std"]
+std = ["statefs-core/std", "statefs-adapter-path-core/std"]

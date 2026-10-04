@@ -18,3 +18,10 @@ statefs-core = { path = "../../core/statefs-core", default-features = false }
 statefs-adapter-opt-cache = { path = "../../adapters/opt/statefs-adapter-opt-cache", default-features = false }
 statefs-adapter-opt-simd = { path = "../../adapters/opt/statefs-adapter-opt-simd", default-features = false }
 stitch-rs = { git = "https://github.com/ulquiorracode/stitch-rs.git", branch = "main", default-features = false }
+
+[dev-dependencies]
+statefs-adapter-opt-lockfree = { path = "../../adapters/opt/statefs-adapter-opt-lockfree" }
+statefs-adapter-opt-mmap = { path = "../../adapters/opt/statefs-adapter-opt-mmap" }
+statefs-adapter-path-handles = { path = "../../adapters/path/statefs-adapter-path-handles" }
+statefs-codec-bin = { path = "../../codecs/statefs-codec-bin" }
+statefs-codec-toml = { path = "../../codecs/statefs-codec-toml" }

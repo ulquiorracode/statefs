@@ -1,0 +1,15 @@
+[package]
+name = "statefs-codec-json"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Native streaming and hierarchical JSON codec for StateFS"
+keywords = ["json", "codec", "serialization", "deserialization"]
+categories = ["encoding", "config"]
+
+[dependencies]
+statefs-core = { path = "../../core/statefs-core" }
+serde_json = "1.0"
+serde = { version = "1.0", features = ["derive"] }
