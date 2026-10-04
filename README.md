@@ -128,6 +128,10 @@ The StateFS ecosystem is structured around decoupled, zero-cost modular domains:
   - **[`statefs-adapter-bridge-config`](adapters/bridge/statefs-adapter-bridge-config)**: Drop-in compatibility wrapper for code using `config-rs`.
 - **Compute Adapters (`adapters/compute/`)**:
   - **[`statefs-adapter-compute-rayon`](adapters/compute/statefs-adapter-compute-rayon)**: Thread-pool parallel batch queries via `rayon`.
+- **VFS Domain (`vfs/`)**:
+  - **[`statefs-vfs-core`](vfs/statefs-vfs-core)**: `VfsProvider` trait port, longest-prefix `VfsMountHub`, and layered `VfsOverlay` search paths.
+  - **[`statefs-vfs-disk`](vfs/statefs-vfs-disk)**: Sandboxed physical directory mount provider with directory traversal attack prevention.
+  - **[`statefs-vfs-package`](vfs/statefs-vfs-package)**: In-memory and zero-copy continuous package container provider (WAD3 / PAK / FlatArchive).
 - **Benchmarks (`benches/`)**:
   - **[`matrix_bench`](benches/matrix_bench)**: Multi-candidate benchmark grid comparing all optimization tiers.
 

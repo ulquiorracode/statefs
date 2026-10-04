@@ -1,0 +1,12 @@
+[package]
+name = "statefs-vfs-disk"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Physical disk directory mount provider with directory traversal protection for StateFS VFS"
+
+[dependencies]
+statefs-core = { path = "../../core/statefs-core" }
+statefs-vfs-core = { path = "../statefs-vfs-core" }

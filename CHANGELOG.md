@@ -35,4 +35,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Subtree revision tracking (`subtree_revision: u64`) with cascading updates and zero-cost O(1) `SubtreeWatcher`.
 - Glob pattern matching (`find_glob`) with support for single `*` and recursive `**` wildcards.
 - Production runnable examples under `runtime/statefs-runtime/examples/`: `game_server_cvars`, `zero_copy_snapshot`, and `reactive_watch`.
-- `matrix_bench`: multi-candidate unified matrix benchmark grid comparing 7 tiers across scales and measuring cold boot / WAL throughput.
+- `statefs-vfs-core`: `VfsProvider` trait port, longest-prefix `VfsMountHub`, and layered `VfsOverlay` search paths.
+- `statefs-vfs-disk`: sandboxed physical directory mount provider with directory traversal attack prevention.
+- `statefs-vfs-package`: in-memory and zero-copy continuous package container provider (WAD3 / PAK / FlatArchive).
+- `matrix_bench`: multi-candidate unified matrix benchmark grid comparing 8 tiers across scales and measuring cold boot / WAL throughput / PathHandle direct lookup.

@@ -1,0 +1,16 @@
+[package]
+name = "statefs-vfs-package"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Virtual package and archive container provider (WAD3 / PAK / FlatArchive) for StateFS VFS"
+
+[features]
+default = ["std"]
+std = ["statefs-core/std", "statefs-vfs-core/std"]
+
+[dependencies]
+statefs-core = { path = "../../core/statefs-core", default-features = false }
+statefs-vfs-core = { path = "../statefs-vfs-core", default-features = false }

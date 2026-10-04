@@ -1,0 +1,15 @@
+[package]
+name = "statefs-vfs-core"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Virtual File System abstractions, mount point hubs, and overlay search paths for StateFS"
+
+[features]
+default = ["std"]
+std = ["statefs-core/std"]
+
+[dependencies]
+statefs-core = { path = "../../core/statefs-core", default-features = false }

@@ -14,6 +14,9 @@ members = [
     "adapters/opt/statefs-adapter-opt-lockfree",
     "adapters/bridge/statefs-adapter-bridge-config",
     "adapters/compute/statefs-adapter-compute-rayon",
+    "vfs/statefs-vfs-core",
+    "vfs/statefs-vfs-disk",
+    "vfs/statefs-vfs-package",
     "benches/matrix_bench",
 ]
 resolver = "3"

@@ -17,6 +17,8 @@ statefs-adapter-opt-mmap = { path = "../../adapters/opt/statefs-adapter-opt-mmap
 statefs-adapter-opt-lockfree = { path = "../../adapters/opt/statefs-adapter-opt-lockfree" }
 statefs-codec-bin = { path = "../../codecs/statefs-codec-bin" }
 statefs-adapter-bridge-config = { path = "../../adapters/bridge/statefs-adapter-bridge-config" }
+statefs-adapter-path-handles = { path = "../../adapters/path/statefs-adapter-path-handles" }
+statefs-adapter-path-tokens = { path = "../../adapters/path/statefs-adapter-path-tokens" }
 stitch-rs = { git = "https://github.com/ulquiorracode/stitch-rs.git", branch = "main" }
 config = { version = "0.14", default-features = false, features = ["toml"] }
 toml = "0.8"

@@ -24,6 +24,7 @@ use cap::Cap;
 use statefs_adapter_bridge_config::ConfigBridge;
 use statefs_adapter_opt_lockfree::create_wal_channel;
 use statefs_adapter_opt_mmap::MmapStorageBacking;
+use statefs_adapter_path_handles::PathHandleCache;
 use statefs_codec_bin::export_snapshot;
 use statefs_codec_toml::ingest_toml_str;
 use statefs_core::backing::RawNode;
@@ -424,6 +425,37 @@ fn main() {
                 ns_per_op: (elapsed as f64) / (scale as f64),
                 ops_per_sec: ((scale as f64) / (elapsed as f64)) * 1_000_000_000.0,
                 heap_bytes: wal_mem,
+            });
+        }
+
+        // 8. Candidate 8: StateFS (PathHandle Direct O(1) Index Lookup)
+        {
+            let before_mem = ALLOCATOR.allocated();
+            let mut store = MemStore::new();
+            populate_statefs(&mut store);
+            let mut handle_cache = PathHandleCache::<64>::new();
+            let handle_mem = ALLOCATOR.allocated() - before_mem;
+
+            // Pre-warm handle cache
+            for key in query_keys_statefs {
+                let _ = handle_cache.resolve_or_lookup(&store, key);
+            }
+
+            let start = Instant::now();
+            for i in 0..scale {
+                let key = query_keys_statefs[i % query_keys_statefs.len()];
+                let node = handle_cache.get(key).and_then(|h| store.get_by_handle(h));
+                let _ = black_box(node);
+            }
+            let elapsed = start.elapsed().as_nanos();
+
+            results.push(BenchResult {
+                candidate: "StateFS (PathHandle O(1) Direct Lookup)",
+                iterations: scale,
+                total_time_ns: elapsed,
+                ns_per_op: (elapsed as f64) / (scale as f64),
+                ops_per_sec: ((scale as f64) / (elapsed as f64)) * 1_000_000_000.0,
+                heap_bytes: handle_mem,
             });
         }
 
