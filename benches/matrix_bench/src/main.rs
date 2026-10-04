@@ -8,6 +8,7 @@
 //!   4. `StateFS (+ SIMD + L1 Direct-Mapped Path Cache Adapter)`
 //!   5. `StateFS (stitch-rs Pipeline + Scenario Resolver)`
 //!   6. `StateFS (config-rs Drop-in Compatibility Bridge)`
+//!   7. `StateFS (Lock-Free WAL SPSC Push via bbqueue)`
 //!
 //! - Metrics:
 //!   - Latency per operation (ns)
@@ -21,8 +22,12 @@
 
 use cap::Cap;
 use statefs_adapter_bridge_config::ConfigBridge;
+use statefs_adapter_opt_lockfree::create_wal_channel;
+use statefs_adapter_opt_mmap::MmapStorageBacking;
+use statefs_codec_bin::export_snapshot;
 use statefs_codec_toml::ingest_toml_str;
-use statefs_core::{MemStore, Store};
+use statefs_core::backing::RawNode;
+use statefs_core::{MemStore, Store, Value};
 use statefs_runtime::{
     QueryIntent, QueryScenarioResolver, RuntimeExt, StateFsContext, StateFsTerminal,
 };
@@ -103,6 +108,102 @@ fn main() {
     println!(
         "==========================================================================================================\n"
     );
+
+    // ----------------------------------------------------------------------------------------------------------
+    // PART 1: COLD START / BOOTSTRAP LATENCY BENCHMARK
+    // ----------------------------------------------------------------------------------------------------------
+    println!(">>> BENCHMARK SECTION: COLD START & INGESTION LATENCY (BOOT-TIME)");
+    println!(
+        "----------------------------------------------------------------------------------------------------------"
+    );
+    println!(
+        "{:<44} | {:>14} | {:>14} | {:>12}",
+        "Candidate Bootstrap Source", "Boot Time (µs)", "Throughput (ops)", "Heap Alloc"
+    );
+    println!(
+        "----------------------------------------------------------------------------------------------------------"
+    );
+
+    // 1. config-rs boot from 5 raw TOML files
+    let config_boot_us = {
+        let before_mem = ALLOCATOR.allocated();
+        let start = Instant::now();
+        let cfg = build_config_rs();
+        let elapsed = start.elapsed().as_micros();
+        let heap_used = ALLOCATOR.allocated() - before_mem;
+        let _ = black_box(cfg);
+        println!(
+            "{:<44} | {:>11} µs | {:>14} | {:>9.2} KB",
+            "config-rs (5 TOML strings parse)",
+            elapsed,
+            "1 cold build",
+            (heap_used as f64) / 1024.0
+        );
+        elapsed
+    };
+
+    // 2. StateFS boot from 5 raw TOML files
+    let _statefs_boot_us = {
+        let before_mem = ALLOCATOR.allocated();
+        let start = Instant::now();
+        let mut store = MemStore::new();
+        populate_statefs(&mut store);
+        let elapsed = start.elapsed().as_micros();
+        let heap_used = ALLOCATOR.allocated() - before_mem;
+        let _ = black_box(store);
+        let speedup = (config_boot_us as f64) / (elapsed.max(1) as f64);
+        println!(
+            "{:<44} | {:>11} µs | {:>10.1}x base | {:>9.2} KB",
+            "StateFS (5 TOML streaming ingestion)",
+            elapsed,
+            speedup,
+            (heap_used as f64) / 1024.0
+        );
+        elapsed
+    };
+
+    // 3. StateFS Zero-Copy Mmap Snapshot boot
+    {
+        let mut store = MemStore::new();
+        populate_statefs(&mut store);
+
+        let temp_snapshot_path = std::env::temp_dir().join("statefs_matrix_boot.bin");
+        let raw_nodes = [RawNode {
+            symbol_offset: 0,
+            symbol_len: 4,
+            first_child: 0,
+            next_sibling: 0,
+            revision: 1,
+            flags: 0,
+        }];
+        let raw_strings = b"core";
+        export_snapshot(&store, &raw_nodes, raw_strings, &temp_snapshot_path).unwrap();
+
+        let before_mem = ALLOCATOR.allocated();
+        let start = Instant::now();
+        let mmap_backing = MmapStorageBacking::open(&temp_snapshot_path).unwrap();
+        let elapsed_ns = start.elapsed().as_nanos();
+        let heap_used = ALLOCATOR.allocated() - before_mem;
+        let _ = black_box(mmap_backing);
+
+        let elapsed_us = (elapsed_ns as f64) / 1000.0;
+        let speedup = (config_boot_us as f64) / elapsed_us.max(0.001);
+        let time_str = format!("{:.2} µs ({} ns)", elapsed_us, elapsed_ns);
+        println!(
+            "{:<44} | {:>14} | {:>10.1}x base | {:>9.2} KB",
+            "StateFS (Zero-Copy Mmap Image Open)",
+            time_str,
+            speedup,
+            (heap_used as f64) / 1024.0
+        );
+
+        let _ = std::fs::remove_file(temp_snapshot_path);
+    }
+    println!();
+
+    // ----------------------------------------------------------------------------------------------------------
+    // PART 2: QUERY & MUTATION RUNTIME MATRIX
+    // ----------------------------------------------------------------------------------------------------------
 
     let query_keys_statefs = [
         "core/server/security/rate_limiter/max_requests_per_sec",
@@ -296,6 +397,33 @@ fn main() {
                 ns_per_op: (elapsed as f64) / (scale as f64),
                 ops_per_sec: ((scale as f64) / (elapsed as f64)) * 1_000_000_000.0,
                 heap_bytes: bridge_mem,
+            });
+        }
+
+        // 7. Candidate 7: StateFS (Lock-Free WAL SPSC Mutation Push via bbqueue)
+        {
+            let before_mem = ALLOCATOR.allocated();
+            let (mut producer, mut consumer) = create_wal_channel::<65536>();
+            let wal_mem = ALLOCATOR.allocated() - before_mem;
+
+            let test_val = Value::from(100);
+            let start = Instant::now();
+            for i in 0..scale {
+                let key = query_keys_statefs[i % query_keys_statefs.len()];
+                let _ = black_box(producer.push_insert(key, &test_val, i as u64));
+                if i % 64 == 0 {
+                    let _ = black_box(consumer.pop_event());
+                }
+            }
+            let elapsed = start.elapsed().as_nanos();
+
+            results.push(BenchResult {
+                candidate: "StateFS (Lock-Free WAL SPSC Push)",
+                iterations: scale,
+                total_time_ns: elapsed,
+                ns_per_op: (elapsed as f64) / (scale as f64),
+                ops_per_sec: ((scale as f64) / (elapsed as f64)) * 1_000_000_000.0,
+                heap_bytes: wal_mem,
             });
         }
 

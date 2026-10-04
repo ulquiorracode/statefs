@@ -7,8 +7,10 @@ members = [
     "adapters/opt/statefs-adapter-opt-cache",
     "adapters/opt/statefs-adapter-opt-simd",
     "adapters/opt/statefs-adapter-opt-mmap",
+    "adapters/opt/statefs-adapter-opt-lockfree",
     "adapters/bridge/statefs-adapter-bridge-config",
-    "adapters/compute/statefs-adapter-compute-rayon", "benches/matrix_bench",
+    "adapters/compute/statefs-adapter-compute-rayon",
+    "benches/matrix_bench",
 ]
 resolver = "3"
 

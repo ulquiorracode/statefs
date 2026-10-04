@@ -19,12 +19,14 @@ StateFS was benchmarked against the industry-standard [`config-rs`](https://gith
 =================================================================================================
                                   REAL SERVER PRODUCTION BENCHMARK
 =================================================================================================
-  Metric / Scenario             config-rs (Industry Standard)   StateFS (Arena + SIMD)   Speedup
+  Metric / Scenario             config-rs (Industry Standard)   StateFS (Optimized Profile)   Speedup
 -------------------------------------------------------------------------------------------------
-  Single Key Query              1,028.40 ns (1.02 µs)           89.95 ns                 11.4x faster
-  Multi-Query Batch             3,330.70 ns (3.33 µs)           233.75 ns                14.2x faster
-  Full Server Boot Ingestion    349.02 µs                       232.36 µs                1.5x faster
-  Resident Heap RAM             38.88 KB (39,811 bytes)         27.60 KB (28,260 bytes)  -29% RAM
+  Single Key Query (Hot Loop)   894.57 ns                       39.76 ns (L1 Cache)           22.5x faster
+  Lock-Free WAL Mutation Push   --                              12.34 ns (bbqueue SPSC)       81.04 M ops/sec
+  Cold Boot (Disk / Snapshot)   611.00 µs (TOML parse)          41.10 µs (Zero-Copy Mmap)     14.9x faster
+  Multi-Query Batch             3,330.70 ns (3.33 µs)           233.75 ns                     14.2x faster
+  Full TOML Ingestion           349.02 µs                       232.36 µs                     1.5x faster
+  Resident Heap RAM             38.88 KB (39,811 bytes)         27.60 KB (28,260 bytes)       -29% RAM
 =================================================================================================
 ```
 
@@ -116,6 +118,7 @@ The StateFS ecosystem is structured around decoupled, zero-cost modular domains:
   - **[`statefs-adapter-opt-cache`](adapters/opt/statefs-adapter-opt-cache)**: Compile-time bounded L1 Direct-Mapped inline path cache.
   - **[`statefs-adapter-opt-simd`](adapters/opt/statefs-adapter-opt-simd)**: AVX2 / SSE4.2 SIMD path segment scanner via `memchr2`.
   - **[`statefs-adapter-opt-mmap`](adapters/opt/statefs-adapter-opt-mmap)**: Zero-copy `memmap2` + `zerocopy` physical storage backing.
+  - **[`statefs-adapter-opt-lockfree`](adapters/opt/statefs-adapter-opt-lockfree)**: Lock-free SPSC continuous BipBuffer WAL mutation stream adapter via `bbqueue`.
 - **Bridges (`adapters/bridge/`)**:
   - **[`statefs-adapter-bridge-config`](adapters/bridge/statefs-adapter-bridge-config)**: Drop-in compatibility wrapper for code using `config-rs`.
 - **Compute Adapters (`adapters/compute/`)**:
@@ -128,6 +131,7 @@ The StateFS ecosystem is structured around decoupled, zero-cost modular domains:
 ## License
 
 Licensed under either of:
-- Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
-- MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
+
+- Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE) or <http://www.apache.org/licenses/LICENSE-2.0>)
+- MIT license ([LICENSE-MIT](LICENSE-MIT) or <http://opensource.org/licenses/MIT>)
 at your option.

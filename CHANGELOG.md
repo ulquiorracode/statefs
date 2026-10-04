@@ -25,6 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `statefs-adapter-opt-cache`: compile-time bounded L1 Direct-Mapped inline path cache.
 - `statefs-adapter-opt-simd`: standalone AVX2 / SSE4.2 SIMD path segment scanner via `memchr2`.
 - `statefs-adapter-opt-mmap`: zero-copy `memmap2` and `zerocopy` physical storage backing.
+- `statefs-adapter-opt-lockfree`: lock-free SPSC continuous BipBuffer WAL mutation stream adapter via `bbqueue`.
 - `statefs-adapter-bridge-config`: drop-in high-performance compatibility bridge for `config-rs`.
 - `statefs-adapter-compute-rayon`: thread-pool parallel batch query executor via `rayon`.
-- `matrix_bench`: multi-candidate unified matrix benchmark grid comparing 6 tiers across scales.
+- `matrix_bench`: multi-candidate unified matrix benchmark grid comparing 7 tiers across scales and measuring cold boot / WAL throughput.

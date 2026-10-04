@@ -1,0 +1,24 @@
+[package]
+name = "statefs-adapter-opt-lockfree"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Lock-free SPSC continuous BipBuffer WAL mutation stream adapter for StateFS via bbqueue"
+keywords = ["lock-free", "spsc", "wal", "bbqueue", "bipbuffer"]
+categories = ["concurrency", "data-structures", "no-std"]
+
+[dependencies]
+statefs-core = { path = "../../../core/statefs-core" }
+bbqueue = { version = "0.7", features = ["alloc"] }
+critical-section = { version = "1.2", optional = true }
+
+[features]
+default = ["std"]
+std = [
+    "statefs-core/std",
+    "bbqueue/std",
+    "critical-section",
+    "critical-section?/std",
+]

@@ -13,6 +13,9 @@ statefs-runtime = { path = "../../runtime/statefs-runtime" }
 statefs-codec-toml = { path = "../../codecs/statefs-codec-toml" }
 statefs-adapter-opt-cache = { path = "../../adapters/opt/statefs-adapter-opt-cache" }
 statefs-adapter-opt-simd = { path = "../../adapters/opt/statefs-adapter-opt-simd" }
+statefs-adapter-opt-mmap = { path = "../../adapters/opt/statefs-adapter-opt-mmap" }
+statefs-adapter-opt-lockfree = { path = "../../adapters/opt/statefs-adapter-opt-lockfree" }
+statefs-codec-bin = { path = "../../codecs/statefs-codec-bin" }
 statefs-adapter-bridge-config = { path = "../../adapters/bridge/statefs-adapter-bridge-config" }
 stitch-rs = { git = "https://github.com/ulquiorracode/stitch-rs.git", branch = "main" }
 config = { version = "0.14", default-features = false, features = ["toml"] }
