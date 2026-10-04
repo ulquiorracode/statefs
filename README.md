@@ -145,6 +145,10 @@ StateFS includes complete, real-world runnable examples under [`runtime/statefs-
   ```bash
   cargo run -p statefs-runtime --example game_server_cvars
   ```
+- **`frame_pipeline`**: Full `Host_Frame` U-cycle pipeline powered by `stitch-rs` with delta-time clamping & security middleware, telemetry profiler, and sub-100ns O(1) `PathHandle` CVAR execution with 0 heap allocations.
+  ```bash
+  cargo run -p statefs-runtime --example frame_pipeline
+  ```
 - **`zero_copy_snapshot`**: Instant cold boot via flat binary snapshot export and zero-copy `mmap` backing in under 50 microseconds with zero heap allocation.
   ```bash
   cargo run -p statefs-runtime --example zero_copy_snapshot

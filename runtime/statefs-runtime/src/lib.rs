@@ -85,7 +85,8 @@ impl<const CAP: usize> QueryScenarioResolver<CAP> {
         self.metrics.total_queries = self.metrics.total_queries.saturating_add(1);
 
         if intent.scenario == WorkloadScenario::SteadyStateLoop {
-            if let Some(cached_node_id) = self.cache.get(intent.path) {
+            let current_epoch = self.store.global_revision();
+            if let Some(cached_node_id) = self.cache.get_with_epoch(intent.path, current_epoch) {
                 self.metrics.cache_hits = self.metrics.cache_hits.saturating_add(1);
                 return self.store.get_by_id(cached_node_id);
             }
@@ -93,7 +94,8 @@ impl<const CAP: usize> QueryScenarioResolver<CAP> {
             self.metrics.cache_misses = self.metrics.cache_misses.saturating_add(1);
 
             if let Some(node_id) = self.store.find_node_id(intent.path) {
-                self.cache.put(intent.path, node_id);
+                self.cache
+                    .put_with_epoch(intent.path, node_id, current_epoch);
                 return self.store.get_by_id(node_id);
             }
             None
@@ -149,5 +151,59 @@ impl RuntimeExt for MemStore {
     #[inline(always)]
     fn with_l1_cache<const CAP: usize>(self) -> QueryScenarioResolver<CAP> {
         QueryScenarioResolver::new(self)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use statefs_core::{Path, Store, Value};
+
+    #[test]
+    fn test_resolver_cache_epoch_invalidation_on_mutation() {
+        let mut store = MemStore::new();
+        store
+            .insert(&Path::parse("/server/tickrate"), Value::Int(128))
+            .expect("insert tickrate");
+
+        let mut resolver = store.with_l1_cache::<64>();
+
+        // 1. Initial lookup populates cache
+        let node1 = resolver
+            .resolve_query(QueryIntent::hot_loop("/server/tickrate"))
+            .expect("initial lookup");
+        assert_eq!(node1.value.as_int(), Some(128));
+        assert_eq!(resolver.metrics.cache_misses, 1);
+        assert_eq!(resolver.metrics.cache_hits, 0);
+
+        // 2. Second lookup hits L1 cache with matching epoch
+        let node2 = resolver
+            .resolve_query(QueryIntent::hot_loop("/server/tickrate"))
+            .expect("cached lookup");
+        assert_eq!(node2.value.as_int(), Some(128));
+        assert_eq!(resolver.metrics.cache_hits, 1);
+
+        // 3. Mutate store: update tickrate advances global_revision
+        resolver
+            .store
+            .insert(&Path::parse("/server/tickrate"), Value::Int(64))
+            .expect("update tickrate");
+
+        // 4. Third lookup detects stale epoch, invalidates slot and fetches fresh node
+        let node3 = resolver
+            .resolve_query(QueryIntent::hot_loop("/server/tickrate"))
+            .expect("updated lookup");
+        assert_eq!(node3.value.as_int(), Some(64));
+        assert_eq!(resolver.metrics.cache_misses, 2);
+
+        // 5. Remove node from store
+        resolver
+            .store
+            .remove(&Path::parse("/server/tickrate"))
+            .expect("remove tickrate");
+
+        // 6. Fourth lookup must safely return None rather than stale-reading or panicking
+        let node4 = resolver.resolve_query(QueryIntent::hot_loop("/server/tickrate"));
+        assert!(node4.is_none());
     }
 }
