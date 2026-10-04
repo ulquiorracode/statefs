@@ -17,6 +17,7 @@
 
 extern crate alloc;
 
+pub mod backing;
 pub mod error;
 pub mod mem;
 pub mod node;
@@ -24,6 +25,7 @@ pub mod path;
 pub mod store;
 pub mod value;
 
+pub use backing::{RawNode, StorageBacking};
 pub use error::StoreError;
 pub use mem::MemStore;
 pub use node::Node;

@@ -103,9 +103,25 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ## Workspace Layout
 
-- **[`crates/statefs-core`](crates/statefs-core)**: Pure `no_std` nanokernel (Arena Trie, StringPool, Path, Value, Store).
-- **[`crates/statefs-codec-toml`](crates/statefs-codec-toml)** *(Planned)*: Native zero-copy TOML serialization & streaming deserialization.
-- **[`crates/statefs-codec-bin`](crates/statefs-codec-bin)** *(Planned)*: Flat binary memory-mapped (`memmap2`) snapshot codec.
+The StateFS ecosystem is structured around decoupled, zero-cost modular domains:
+
+- **Core (`core/`)**:
+  - **[`statefs-core`](core/statefs-core)**: Pure `no_std` nanokernel (Arena Trie, StringPool, Path, Value, Storage Ports).
+- **Runtime (`runtime/`)**:
+  - **[`statefs-runtime`](runtime/statefs-runtime)**: Orchestration engine, scenario resolvers, and `stitch-rs` U-cycle pipeline integration.
+- **Codecs (`codecs/`)**:
+  - **[`statefs-codec-toml`](codecs/statefs-codec-toml)**: Streaming TOML ingestion and tree serializer.
+  - **[`statefs-codec-bin`](codecs/statefs-codec-bin)**: Flat binary image exporter for instant disk restoration.
+- **Optimization Adapters (`adapters/opt/`)**:
+  - **[`statefs-adapter-opt-cache`](adapters/opt/statefs-adapter-opt-cache)**: Compile-time bounded L1 Direct-Mapped inline path cache.
+  - **[`statefs-adapter-opt-simd`](adapters/opt/statefs-adapter-opt-simd)**: AVX2 / SSE4.2 SIMD path segment scanner via `memchr2`.
+  - **[`statefs-adapter-opt-mmap`](adapters/opt/statefs-adapter-opt-mmap)**: Zero-copy `memmap2` + `zerocopy` physical storage backing.
+- **Bridges (`adapters/bridge/`)**:
+  - **[`statefs-adapter-bridge-config`](adapters/bridge/statefs-adapter-bridge-config)**: Drop-in compatibility wrapper for code using `config-rs`.
+- **Compute Adapters (`adapters/compute/`)**:
+  - **[`statefs-adapter-compute-rayon`](adapters/compute/statefs-adapter-compute-rayon)**: Thread-pool parallel batch queries via `rayon`.
+- **Benchmarks (`benches/`)**:
+  - **[`matrix_bench`](benches/matrix_bench)**: Multi-candidate benchmark grid comparing all optimization tiers.
 
 ---
 

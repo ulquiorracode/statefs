@@ -1,0 +1,15 @@
+[package]
+name = "statefs-adapter-bridge-config"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Drop-in compatibility bridge for config-rs powered by StateFS"
+keywords = ["config", "bridge", "compatibility", "adapter"]
+categories = ["config"]
+
+[dependencies]
+statefs-core = { path = "../../../core/statefs-core" }
+statefs-runtime = { path = "../../../runtime/statefs-runtime" }
+config = { version = "0.14", default-features = false, features = ["toml"] }

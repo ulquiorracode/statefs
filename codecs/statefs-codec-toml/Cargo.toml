@@ -1,0 +1,15 @@
+[package]
+name = "statefs-codec-toml"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Native streaming and hierarchical TOML codec for StateFS"
+keywords = ["toml", "codec", "serialization", "deserialization"]
+categories = ["encoding", "config"]
+
+[dependencies]
+statefs-core = { path = "../../core/statefs-core" }
+toml = "0.8"
+serde = { version = "1.0", features = ["derive"] }

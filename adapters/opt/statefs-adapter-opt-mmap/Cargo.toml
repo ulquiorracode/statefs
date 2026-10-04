@@ -1,0 +1,15 @@
+[package]
+name = "statefs-adapter-opt-mmap"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Zero-copy memory mapped physical storage backing for StateFS via memmap2 and zerocopy"
+keywords = ["mmap", "zerocopy", "snapshot", "memory-map", "performance"]
+categories = ["filesystem", "data-structures"]
+
+[dependencies]
+statefs-core = { path = "../../../core/statefs-core" }
+memmap2 = "0.9"
+zerocopy = { version = "0.8", features = ["derive"] }

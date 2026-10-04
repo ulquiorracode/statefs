@@ -1,0 +1,14 @@
+[package]
+name = "statefs-adapter-compute-rayon"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Parallel tree ingestion and batch traversal adapter for StateFS via Rayon"
+keywords = ["rayon", "parallel", "batch", "compute"]
+categories = ["concurrency"]
+
+[dependencies]
+statefs-core = { path = "../../../core/statefs-core" }
+rayon = "1.10"

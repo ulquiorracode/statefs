@@ -1,0 +1,17 @@
+[package]
+name = "statefs-adapter-opt-cache"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "L1 Direct-Mapped inline path cache adapter for StateFS"
+keywords = ["cache", "direct-mapped", "const-generic", "performance"]
+categories = ["data-structures", "no-std"]
+
+[features]
+default = ["std"]
+std = ["statefs-core/std"]
+
+[dependencies]
+statefs-core = { path = "../../../core/statefs-core", default-features = false }

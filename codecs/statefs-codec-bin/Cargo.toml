@@ -1,0 +1,15 @@
+[package]
+name = "statefs-codec-bin"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Binary snapshot codec for StateFS"
+keywords = ["binary", "snapshot", "codec", "zerocopy"]
+categories = ["encoding"]
+
+[dependencies]
+statefs-core = { path = "../../core/statefs-core" }
+statefs-adapter-opt-mmap = { path = "../../adapters/opt/statefs-adapter-opt-mmap" }
+zerocopy = { version = "0.8", features = ["derive"] }

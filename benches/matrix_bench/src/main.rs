@@ -3,16 +3,16 @@
 //! Evaluates:
 //! - Candidates:
 //!   1. `config-rs` (Industry Standard Baseline)
-//!   2. `StateFS (No-Op Baseline / Arena Trie Only)`
-//!   3. `StateFS (+ SIMD Segment Scanner)`
-//!   4. `StateFS (+ SIMD + L1 Path Cache)`
-//!   5. `StateFS (Full Stack via Scenario Resolver + stitch-rs Pipeline)`
+//!   2. `StateFS (No-Op Baseline / Pure Arena Trie)`
+//!   3. `StateFS (+ SIMD Segment Scanner Adapter)`
+//!   4. `StateFS (+ SIMD + L1 Direct-Mapped Path Cache Adapter)`
+//!   5. `StateFS (stitch-rs Pipeline + Scenario Resolver)`
+//!   6. `StateFS (config-rs Drop-in Compatibility Bridge)`
 //!
 //! - Metrics:
 //!   - Latency per operation (ns)
 //!   - Throughput (ops/sec)
 //!   - Resident Heap Memory (bytes / KB via Cap tracking)
-//!   - Total Memory Allocations Count
 //!
 //! - Load Tiers:
 //!   - 10 ops (Cold Start / Light)
@@ -20,9 +20,11 @@
 //!   - 50,000 ops (High-Frequency Game Loop / Heavy Burst)
 
 use cap::Cap;
-use statefs_core::{MemStore, Path, Store, Value};
-use statefs_opt::{
-    QueryIntent, QueryScenarioResolver, StateFsContext, StateFsTerminal, StoreOptExt,
+use statefs_adapter_bridge_config::ConfigBridge;
+use statefs_codec_toml::ingest_toml_str;
+use statefs_core::{MemStore, Store};
+use statefs_runtime::{
+    QueryIntent, QueryScenarioResolver, RuntimeExt, StateFsContext, StateFsTerminal,
 };
 use std::alloc;
 use std::hint::black_box;
@@ -32,13 +34,16 @@ use stitch_rs::pipeline::Pipeline;
 #[global_allocator]
 static ALLOCATOR: Cap<alloc::System> = Cap::new(alloc::System, usize::MAX);
 
-const FIXTURE_GOLDSRC_TOML: &str = include_str!("../../statefs-core/benches/fixtures/goldsrc.toml");
-const FIXTURE_PLUGINS_TOML: &str = include_str!("../../statefs-core/benches/fixtures/plugins.toml");
-const FIXTURE_COMMON_LANG: &str = include_str!("../../statefs-core/benches/fixtures/common.toml");
+const FIXTURE_GOLDSRC_TOML: &str =
+    include_str!("../../../core/statefs-core/benches/fixtures/goldsrc.toml");
+const FIXTURE_PLUGINS_TOML: &str =
+    include_str!("../../../core/statefs-core/benches/fixtures/plugins.toml");
+const FIXTURE_COMMON_LANG: &str =
+    include_str!("../../../core/statefs-core/benches/fixtures/common.toml");
 const FIXTURE_MODERATION_LANG: &str =
-    include_str!("../../statefs-core/benches/fixtures/moderation.toml");
+    include_str!("../../../core/statefs-core/benches/fixtures/moderation.toml");
 const FIXTURE_MODERATION_BUNDLE: &str =
-    include_str!("../../statefs-core/benches/fixtures/bundle.toml");
+    include_str!("../../../core/statefs-core/benches/fixtures/bundle.toml");
 
 fn populate_statefs(store: &mut MemStore) {
     for (prefix, raw) in [
@@ -48,33 +53,7 @@ fn populate_statefs(store: &mut MemStore) {
         ("lang/moderation", FIXTURE_MODERATION_LANG),
         ("bundles/moderation", FIXTURE_MODERATION_BUNDLE),
     ] {
-        let toml_val: toml::Value = toml::from_str(raw).unwrap();
-        let p = Path::parse(prefix);
-        flatten_toml_to_statefs(store, &p, &toml_val);
-    }
-}
-
-fn flatten_toml_to_statefs(store: &mut MemStore, current_path: &Path, val: &toml::Value) {
-    match val {
-        toml::Value::Table(table) => {
-            for (k, v) in table {
-                let sub_path = current_path.join(k);
-                flatten_toml_to_statefs(store, &sub_path, v);
-            }
-        }
-        toml::Value::String(s) => {
-            store.insert(current_path, Value::from(s.as_str())).unwrap();
-        }
-        toml::Value::Integer(i) => {
-            store.insert(current_path, Value::from(*i)).unwrap();
-        }
-        toml::Value::Float(f) => {
-            store.insert(current_path, Value::from(*f)).unwrap();
-        }
-        toml::Value::Boolean(b) => {
-            store.insert(current_path, Value::from(*b)).unwrap();
-        }
-        _ => {}
+        ingest_toml_str(store, prefix, raw).unwrap();
     }
 }
 
@@ -152,7 +131,7 @@ fn main() {
             "----------------------------------------------------------------------------------------------------------"
         );
         println!(
-            "{:<42} | {:>10} | {:>14} | {:>12} | {:>12}",
+            "{:<44} | {:>10} | {:>14} | {:>12} | {:>12}",
             "Candidate / Optimization Profile",
             "Time / Op",
             "Throughput",
@@ -189,14 +168,13 @@ fn main() {
             });
         }
 
-        // 2. Candidate 2: StateFS (No-Op Baseline / Arena Trie Only)
+        // 2. Candidate 2: StateFS (No-Op Baseline / Pure Arena Trie)
         {
             let before_mem = ALLOCATOR.allocated();
             let mut store = MemStore::new();
             populate_statefs(&mut store);
             let store_mem = ALLOCATOR.allocated() - before_mem;
 
-            // Pure get_by_segments traversal without SIMD and without cache
             let start = Instant::now();
             for i in 0..scale {
                 let key = query_keys_statefs[i % query_keys_statefs.len()];
@@ -216,7 +194,7 @@ fn main() {
             });
         }
 
-        // 3. Candidate 3: StateFS (+ SIMD Segment Scanner)
+        // 3. Candidate 3: StateFS (+ SIMD Segment Scanner Adapter)
         {
             let before_mem = ALLOCATOR.allocated();
             let mut store = MemStore::new();
@@ -232,7 +210,7 @@ fn main() {
             let elapsed = start.elapsed().as_nanos();
 
             results.push(BenchResult {
-                candidate: "StateFS (+ SIMD Segment Scanner)",
+                candidate: "StateFS (+ SIMD Path Scanner Adapter)",
                 iterations: scale,
                 total_time_ns: elapsed,
                 ns_per_op: (elapsed as f64) / (scale as f64),
@@ -241,7 +219,7 @@ fn main() {
             });
         }
 
-        // 4. Candidate 4: StateFS (+ SIMD + L1 Path Cache)
+        // 4. Candidate 4: StateFS (+ SIMD + L1 Direct-Mapped Path Cache Adapter)
         {
             let before_mem = ALLOCATOR.allocated();
             let mut store = MemStore::new();
@@ -258,7 +236,7 @@ fn main() {
             let elapsed = start.elapsed().as_nanos();
 
             results.push(BenchResult {
-                candidate: "StateFS (+ SIMD + L1 Direct-Mapped Cache)",
+                candidate: "StateFS (+ SIMD + L1 Cache Adapter)",
                 iterations: scale,
                 total_time_ns: elapsed,
                 ns_per_op: (elapsed as f64) / (scale as f64),
@@ -267,7 +245,7 @@ fn main() {
             });
         }
 
-        // 5. Candidate 5: StateFS (Full Stack via Scenario Resolver + stitch-rs Pipeline)
+        // 5. Candidate 5: StateFS (stitch-rs Pipeline + Scenario Resolver)
         {
             let before_mem = ALLOCATOR.allocated();
             let mut store = MemStore::new();
@@ -286,12 +264,38 @@ fn main() {
             let elapsed = start.elapsed().as_nanos();
 
             results.push(BenchResult {
-                candidate: "StateFS (stitch-rs Pipeline + Resolver + L1)",
+                candidate: "StateFS (stitch-rs Pipeline + Resolver)",
                 iterations: scale,
                 total_time_ns: elapsed,
                 ns_per_op: (elapsed as f64) / (scale as f64),
                 ops_per_sec: ((scale as f64) / (elapsed as f64)) * 1_000_000_000.0,
                 heap_bytes: pipe_mem,
+            });
+        }
+
+        // 6. Candidate 6: StateFS (config-rs Drop-in Compatibility Bridge)
+        {
+            let before_mem = ALLOCATOR.allocated();
+            let mut store = MemStore::new();
+            populate_statefs(&mut store);
+            let mut bridge = ConfigBridge::<64>::new(store);
+            let bridge_mem = ALLOCATOR.allocated() - before_mem;
+
+            let start = Instant::now();
+            for i in 0..scale {
+                let key = query_keys_statefs[i % query_keys_statefs.len()];
+                let val: Result<String, _> = bridge.get_string(key);
+                let _ = black_box(val);
+            }
+            let elapsed = start.elapsed().as_nanos();
+
+            results.push(BenchResult {
+                candidate: "StateFS (config-rs Drop-in Bridge)",
+                iterations: scale,
+                total_time_ns: elapsed,
+                ns_per_op: (elapsed as f64) / (scale as f64),
+                ops_per_sec: ((scale as f64) / (elapsed as f64)) * 1_000_000_000.0,
+                heap_bytes: bridge_mem,
             });
         }
 
@@ -320,7 +324,7 @@ fn main() {
             };
 
             println!(
-                "{:<42} | {:>10} | {:>14} | {:>12} | {:>12}",
+                "{:<44} | {:>10} | {:>14} | {:>12} | {:>12}",
                 r.candidate, time_str, ops_str, mem_str, speedup_str
             );
         }

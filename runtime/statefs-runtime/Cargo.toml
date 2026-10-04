@@ -1,0 +1,20 @@
+[package]
+name = "statefs-runtime"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Orchestration runtime, scenario resolvers, and pipeline integration for StateFS"
+keywords = ["runtime", "resolver", "pipeline", "orchestration"]
+categories = ["data-structures", "no-std"]
+
+[features]
+default = ["std"]
+std = ["statefs-core/std"]
+
+[dependencies]
+statefs-core = { path = "../../core/statefs-core", default-features = false }
+statefs-adapter-opt-cache = { path = "../../adapters/opt/statefs-adapter-opt-cache", default-features = false }
+statefs-adapter-opt-simd = { path = "../../adapters/opt/statefs-adapter-opt-simd", default-features = false }
+stitch-rs = { git = "https://github.com/ulquiorracode/stitch-rs.git", branch = "main", default-features = false }

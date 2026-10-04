@@ -1,0 +1,19 @@
+[package]
+name = "statefs-adapter-opt-simd"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "SIMD-accelerated path segment scanner adapter for StateFS"
+keywords = ["simd", "memchr", "path", "scanner", "performance"]
+categories = ["data-structures", "no-std"]
+
+[features]
+default = ["std", "simd"]
+std = ["statefs-core/std"]
+simd = ["dep:memchr"]
+
+[dependencies]
+statefs-core = { path = "../../../core/statefs-core", default-features = false }
+memchr = { version = "2.7", default-features = false, optional = true }

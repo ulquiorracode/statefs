@@ -1,0 +1,36 @@
+# ==============================================================================
+# GoldSrc.rs Plugin Orchestration Configuration (plugins.toml)
+# ==============================================================================
+# This file controls plugin execution priority, profile groups, granular
+# debugging, and reactive server lifecycle rules.
+
+# ------------------------------------------------------------------------------
+# 1. Plugin Declarations & Priorities
+# ------------------------------------------------------------------------------
+[[plugins]]
+name = "test_hud"
+enabled = false
+
+# ------------------------------------------------------------------------------
+# 2. Named Profile Groups
+# ------------------------------------------------------------------------------
+# Группы позволяют мгновенно включать/отключать пачки плагинов.
+# Если enabled = false, все плагины в списке будут выгружены/отключены.
+[groups.test_suite]
+enabled = true
+plugins = ["test_suite/test_ecs", "test_suite/test_hud", "test_suite/test_menu"]
+
+# ------------------------------------------------------------------------------
+# 3. Reactive Server Rules
+# ------------------------------------------------------------------------------
+# Правило 1: Автоматическая пауза VIP меню на картах de_dust2 (или fy_*/aim_*)
+[[rules]]
+name = "auto_pause_vip_on_dust2"
+when = { map = ["de_dust2"] }
+action = { pause = ["vip_menu"], set_cvar = { "sv_gravity" = 200 } }
+
+# Правило 2: Включение тестового меню при наличии от 1 до 32 игроков
+[[rules]]
+name = "unpause_test_hud_on_dust2"
+when = { map = ["de_dust2"] }
+action = { unpause = ["test_hud"] }

@@ -1,0 +1,20 @@
+[package]
+name = "matrix_bench"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Unified matrix benchmark runner across StateFS candidates and workloads"
+
+[dependencies]
+statefs-core = { path = "../../core/statefs-core" }
+statefs-runtime = { path = "../../runtime/statefs-runtime" }
+statefs-codec-toml = { path = "../../codecs/statefs-codec-toml" }
+statefs-adapter-opt-cache = { path = "../../adapters/opt/statefs-adapter-opt-cache" }
+statefs-adapter-opt-simd = { path = "../../adapters/opt/statefs-adapter-opt-simd" }
+statefs-adapter-bridge-config = { path = "../../adapters/bridge/statefs-adapter-bridge-config" }
+stitch-rs = { git = "https://github.com/ulquiorracode/stitch-rs.git", branch = "main" }
+config = { version = "0.14", default-features = false, features = ["toml"] }
+toml = "0.8"
+cap = "0.1"
