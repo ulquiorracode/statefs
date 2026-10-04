@@ -8,7 +8,7 @@
 
 use statefs_adapter_opt_mmap::MmapStorageBacking;
 use statefs_codec_bin::export_snapshot;
-use statefs_core::backing::{RawNode, StorageBacking};
+use statefs_core::backing::StorageBacking;
 use statefs_core::{MemStore, Path, Store, Value};
 use std::time::Instant;
 
@@ -31,29 +31,13 @@ fn main() {
         .insert(&Path::parse("/server/map"), Value::from("de_dust2"))
         .unwrap();
 
-    // 2. Export to disk snapshot file
+    // 2. Export to disk snapshot file directly from live MemStore
     let snapshot_file = std::env::temp_dir().join("statefs_example_snapshot.bin");
-    let raw_nodes = [
-        RawNode {
-            symbol_offset: 0,
-            symbol_len: 6,
-            first_child: 1,
-            next_sibling: u32::MAX,
-            revision: 1,
-            flags: 0,
-        },
-        RawNode {
-            symbol_offset: 6,
-            symbol_len: 3,
-            first_child: u32::MAX,
-            next_sibling: u32::MAX,
-            revision: 1,
-            flags: 0,
-        },
-    ];
-    let raw_strings = b"servermap";
-    export_snapshot(&store, &raw_nodes, raw_strings, &snapshot_file).unwrap();
-    println!("Saved binary snapshot to: {:?}", snapshot_file);
+    export_snapshot(&store, &snapshot_file).unwrap();
+    println!(
+        "Saved real MemStore binary snapshot to: {:?}",
+        snapshot_file
+    );
 
     // 3. Measure cold boot time via memory mapping
     let start = Instant::now();

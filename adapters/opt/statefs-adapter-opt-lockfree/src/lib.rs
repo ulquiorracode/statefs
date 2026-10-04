@@ -186,7 +186,22 @@ fn encode_value_into(val: &Value, buf: &mut [u8], offset: &mut usize) {
     }
 }
 
+const MAX_WAL_DECODE_DEPTH: usize = 32;
+const MAX_WAL_CONTAINER_CAP: usize = 4096;
+
 fn decode_value_from(buf: &[u8], offset: &mut usize) -> Result<Value, WalError> {
+    decode_value_from_depth(buf, offset, 0)
+}
+
+fn decode_value_from_depth(
+    buf: &[u8],
+    offset: &mut usize,
+    depth: usize,
+) -> Result<Value, WalError> {
+    if depth > MAX_WAL_DECODE_DEPTH {
+        return Err(WalError::MalformedFrame);
+    }
+
     if buf.len() < *offset + 1 {
         return Err(WalError::MalformedFrame);
     }
@@ -273,9 +288,12 @@ fn decode_value_from(buf: &[u8], offset: &mut usize) -> Result<Value, WalError> 
                     .map_err(|_| WalError::MalformedFrame)?,
             ) as usize;
             *offset += 4;
+            if count > MAX_WAL_CONTAINER_CAP {
+                return Err(WalError::MalformedFrame);
+            }
             let mut items = Vec::with_capacity(count);
             for _ in 0..count {
-                items.push(decode_value_from(buf, offset)?);
+                items.push(decode_value_from_depth(buf, offset, depth + 1)?);
             }
             Ok(Value::Array(items))
         }
@@ -289,6 +307,9 @@ fn decode_value_from(buf: &[u8], offset: &mut usize) -> Result<Value, WalError> 
                     .map_err(|_| WalError::MalformedFrame)?,
             ) as usize;
             *offset += 4;
+            if count > MAX_WAL_CONTAINER_CAP {
+                return Err(WalError::MalformedFrame);
+            }
             let mut map = BTreeMap::new();
             for _ in 0..count {
                 if buf.len() < *offset + 2 {
@@ -307,7 +328,7 @@ fn decode_value_from(buf: &[u8], offset: &mut usize) -> Result<Value, WalError> 
                     .map_err(|_| WalError::InvalidPathEncoding)?
                     .to_string();
                 *offset += k_len;
-                let val = decode_value_from(buf, offset)?;
+                let val = decode_value_from_depth(buf, offset, depth + 1)?;
                 map.insert(k, val);
             }
             Ok(Value::Map(map))

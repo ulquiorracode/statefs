@@ -181,7 +181,7 @@ impl MemStore {
 
     /// Resolves any valid path (intermediate directory or leaf) to its 32-bit arena index.
     pub fn find_arena_index(&self, raw_path: &str) -> Option<u32> {
-        let trimmed = raw_path.trim();
+        let trimmed = raw_path.trim_ascii();
         if trimmed.is_empty() || trimmed == "/" {
             return Some(0);
         }
@@ -194,7 +194,8 @@ impl MemStore {
             for pos in memchr::memchr2_iter(b'/', b'\\', bytes) {
                 if pos > start {
                     // SAFETY: valid utf-8 slice of verified str
-                    let seg = unsafe { core::str::from_utf8_unchecked(&bytes[start..pos]) }.trim();
+                    let seg =
+                        unsafe { core::str::from_utf8_unchecked(&bytes[start..pos]) }.trim_ascii();
                     if !seg.is_empty() {
                         cur = self.find_child(cur, seg)?;
                     }
@@ -203,7 +204,7 @@ impl MemStore {
             }
 
             if start < bytes.len() {
-                let seg = unsafe { core::str::from_utf8_unchecked(&bytes[start..]) }.trim();
+                let seg = unsafe { core::str::from_utf8_unchecked(&bytes[start..]) }.trim_ascii();
                 if !seg.is_empty() {
                     cur = self.find_child(cur, seg)?;
                 }
@@ -214,7 +215,7 @@ impl MemStore {
         {
             for seg in trimmed
                 .split(['/', '\\'])
-                .map(|s| s.trim())
+                .map(|s| s.trim_ascii())
                 .filter(|s| !s.is_empty())
             {
                 cur = self.find_child(cur, seg)?;
@@ -253,14 +254,72 @@ impl MemStore {
         self.arena[idx as usize].node.as_ref()
     }
 
-    fn find_child(&self, parent_idx: u32, segment: &str) -> Option<u32> {
-        let mut cur = self.arena[parent_idx as usize].first_child;
-        while cur != NULL_IDX {
-            let node = &self.arena[cur as usize];
-            if self.pool.resolve(node.symbol) == segment {
-                return Some(cur);
+    /// Total number of arena nodes in memory.
+    #[inline]
+    pub fn arena_len(&self) -> usize {
+        self.arena.len()
+    }
+
+    /// Access raw interned string buffer bytes.
+    #[inline]
+    pub fn string_pool_bytes(&self) -> &[u8] {
+        self.pool.buffer.as_bytes()
+    }
+
+    /// Exports all arena nodes as stable [`RawNode`] structs along with interned string bytes.
+    pub fn export_raw_nodes(&self) -> (Vec<crate::backing::RawNode>, &[u8]) {
+        let mut raw_nodes = Vec::with_capacity(self.arena.len());
+        for (i, arena_node) in self.arena.iter().enumerate() {
+            let (sym_offset, sym_len) = self
+                .pool
+                .spans
+                .get(arena_node.symbol.0 as usize)
+                .copied()
+                .unwrap_or((0, 0));
+            let revision = arena_node
+                .node
+                .as_ref()
+                .map(|n| n.revision)
+                .unwrap_or(arena_node.subtree_revision);
+
+            let mut flags = 0u32;
+            if let Some(n) = &arena_node.node {
+                if n.readonly {
+                    flags |= 1;
+                }
+                if n.hidden {
+                    flags |= 2;
+                }
             }
-            cur = node.next_sibling;
+
+            raw_nodes.push(crate::backing::RawNode {
+                symbol_offset: sym_offset,
+                symbol_len: sym_len,
+                first_child: arena_node.first_child,
+                next_sibling: arena_node.next_sibling,
+                revision,
+                flags,
+            });
+            let _ = i;
+        }
+
+        (raw_nodes, self.pool.buffer.as_bytes())
+    }
+
+    fn find_child(&self, parent_idx: u32, segment: &str) -> Option<u32> {
+        // Fast-path: if the segment was never interned, it cannot exist in any child
+        let sym_opt = self.pool.lookup.get(segment).copied();
+
+        let mut cur = self.arena[parent_idx as usize].first_child;
+        if let Some(target_sym) = sym_opt {
+            // O(1) integer comparison for interned symbols
+            while cur != NULL_IDX {
+                let node = &self.arena[cur as usize];
+                if node.symbol == target_sym {
+                    return Some(cur);
+                }
+                cur = node.next_sibling;
+            }
         }
         None
     }
@@ -362,9 +421,11 @@ impl Store for MemStore {
 
         while child_idx != NULL_IDX {
             let child = &self.arena[child_idx as usize];
-            let is_visible = child.node.as_ref().is_none_or(|n| !n.hidden);
+            // An entry is visible if it has a non-hidden node OR it is a non-empty directory branch
+            let has_active_node = child.node.as_ref().is_some_and(|n| !n.hidden);
+            let has_children = child.first_child != NULL_IDX;
 
-            if is_visible {
+            if has_active_node || has_children {
                 let name = self.pool.resolve(child.symbol);
                 child_paths.push(prefix.join(name));
             }

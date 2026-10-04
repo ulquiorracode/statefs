@@ -114,15 +114,15 @@ The StateFS ecosystem is structured around decoupled, zero-cost modular domains:
 - **Codecs (`codecs/`)**:
   - **[`statefs-codec-toml`](codecs/statefs-codec-toml)**: Streaming TOML ingestion and tree serializer.
   - **[`statefs-codec-json`](codecs/statefs-codec-json)**: Streaming JSON ingestion and tree exporter.
-  - **[`statefs-codec-bin`](codecs/statefs-codec-bin)**: Flat binary image exporter for instant disk restoration.
+  - **[`statefs-codec-bin`](codecs/statefs-codec-bin)**: Flat binary image exporter for instant disk restoration with 32-byte header alignment.
 - **Path Optimization Adapters (`adapters/path/`)**:
   - **[`statefs-adapter-path-core`](adapters/path/statefs-adapter-path-core)**: `PathOptimizer` trait port, zero-alloc `InlinePath`, and recursive fractal `PathOptimizerHub`.
   - **[`statefs-adapter-path-tokens`](adapters/path/statefs-adapter-path-tokens)**: High-frequency prefix compression dictionary (`PrefixTokenizer`).
-  - **[`statefs-adapter-path-handles`](adapters/path/statefs-adapter-path-handles)**: Direct-mapped direct arena index cache (`PathHandleCache`) bypassing string parsing.
+  - **[`statefs-adapter-path-handles`](adapters/path/statefs-adapter-path-handles)**: Direct-mapped direct arena index cache (`PathHandleCache`) bypassing string parsing with epoch-based cache invalidation.
 - **Optimization Adapters (`adapters/opt/`)**:
-  - **[`statefs-adapter-opt-cache`](adapters/opt/statefs-adapter-opt-cache)**: Compile-time bounded L1 Direct-Mapped inline path cache.
+  - **[`statefs-adapter-opt-cache`](adapters/opt/statefs-adapter-opt-cache)**: Compile-time bounded L1 Direct-Mapped inline path cache with epoch staleness protection.
   - **[`statefs-adapter-opt-simd`](adapters/opt/statefs-adapter-opt-simd)**: AVX2 / SSE4.2 SIMD path segment scanner via `memchr2`.
-  - **[`statefs-adapter-opt-mmap`](adapters/opt/statefs-adapter-opt-mmap)**: Zero-copy `memmap2` + `zerocopy` physical storage backing.
+  - **[`statefs-adapter-opt-mmap`](adapters/opt/statefs-adapter-opt-mmap)**: Zero-copy `memmap2` + `zerocopy` physical storage backing with version and boundary verification.
   - **[`statefs-adapter-opt-lockfree`](adapters/opt/statefs-adapter-opt-lockfree)**: Lock-free SPSC continuous BipBuffer WAL mutation stream adapter via `bbqueue`.
 - **Bridges (`adapters/bridge/`)**:
   - **[`statefs-adapter-bridge-config`](adapters/bridge/statefs-adapter-bridge-config)**: Drop-in compatibility wrapper for code using `config-rs`.

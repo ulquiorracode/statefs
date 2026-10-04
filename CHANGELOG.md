@@ -39,3 +39,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `statefs-vfs-disk`: sandboxed physical directory mount provider with directory traversal attack prevention.
 - `statefs-vfs-package`: in-memory and zero-copy continuous package container provider (WAD3 / PAK / FlatArchive).
 - `matrix_bench`: multi-candidate unified matrix benchmark grid comparing 8 tiers across scales and measuring cold boot / WAL throughput / PathHandle direct lookup.
+
+### Fixed
+- **Cache Invalidation & Stale Read Prevention**: Added epoch verification (`epoch: u64`) to `L1PathCache` and `PathHandleCache` tied to `MemStore::global_revision()`. Mutations (`insert`, `remove`, `clear`) advance global revision, invalidating stale slots and preventing ghost reads.
+- **True Snapshot Persistence & Strict Mmap Validation**: Implemented true arena serialization in `statefs-codec-bin` via `MemStore::export_raw_nodes()`. Padded `SnapshotHeader` to 32 bytes (`_pad: [u8; 8]`) ensuring strict 8-byte alignment for mapped `RawNode` slices. Added explicit `SNAPSHOT_VERSION` verification and safe offset arithmetic with overflow protection (`checked_mul`, `checked_add`) in `statefs-adapter-opt-mmap`.
+- **Safe Codecs**: Eliminated `.unwrap()` calls in `statefs-codec-toml`, replacing them with structured `TomlCodecError`. Replaced silent error drops in `statefs-codec-json` with structured `JsonCodecError`. Added support for simultaneous scalar and branch coexistence at the same node path via `_value` key preservation.
+- **Trie Traversal Optimizations**: Replaced string comparisons in `MemStore::find_child` with interned `Symbol` ID equality checks. Replaced Unicode `trim()` with zero-cost `trim_ascii()` in path segment parsing.
+- **Honest Benchmarking Suite**: Enhanced `matrix_bench` with realistic full-store snapshot loading, honest WAL execution (`push_insert` followed by `drain_to_store`), and Candidate 9: a 95% Read / 5% Write mixed loop validating cache invalidation under mutation.

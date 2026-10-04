@@ -27,7 +27,6 @@ use statefs_adapter_opt_mmap::MmapStorageBacking;
 use statefs_adapter_path_handles::PathHandleCache;
 use statefs_codec_bin::export_snapshot;
 use statefs_codec_toml::ingest_toml_str;
-use statefs_core::backing::RawNode;
 use statefs_core::{MemStore, Store, Value};
 use statefs_runtime::{
     QueryIntent, QueryScenarioResolver, RuntimeExt, StateFsContext, StateFsTerminal,
@@ -163,36 +162,28 @@ fn main() {
         elapsed
     };
 
-    // 3. StateFS Zero-Copy Mmap Snapshot boot
+    // 3. StateFS Zero-Copy Mmap Snapshot boot (True full store export of all 5 configs)
     {
         let mut store = MemStore::new();
         populate_statefs(&mut store);
 
         let temp_snapshot_path = std::env::temp_dir().join("statefs_matrix_boot.bin");
-        let raw_nodes = [RawNode {
-            symbol_offset: 0,
-            symbol_len: 4,
-            first_child: 0,
-            next_sibling: 0,
-            revision: 1,
-            flags: 0,
-        }];
-        let raw_strings = b"core";
-        export_snapshot(&store, &raw_nodes, raw_strings, &temp_snapshot_path).unwrap();
+        // Dump the entire populated store (all 5 TOMLs converted to arena nodes and interned strings)
+        export_snapshot(&store, &temp_snapshot_path).unwrap();
 
         let before_mem = ALLOCATOR.allocated();
         let start = Instant::now();
         let mmap_backing = MmapStorageBacking::open(&temp_snapshot_path).unwrap();
         let elapsed_ns = start.elapsed().as_nanos();
         let heap_used = ALLOCATOR.allocated() - before_mem;
-        let _ = black_box(mmap_backing);
+        let _ = black_box(&mmap_backing);
 
         let elapsed_us = (elapsed_ns as f64) / 1000.0;
         let speedup = (config_boot_us as f64) / elapsed_us.max(0.001);
         let time_str = format!("{:.2} µs ({} ns)", elapsed_us, elapsed_ns);
         println!(
             "{:<44} | {:>14} | {:>10.1}x base | {:>9.2} KB",
-            "StateFS (Zero-Copy Mmap Image Open)",
+            "StateFS (Full Store Mmap Image Open)",
             time_str,
             speedup,
             (heap_used as f64) / 1024.0
@@ -401,9 +392,11 @@ fn main() {
             });
         }
 
-        // 7. Candidate 7: StateFS (Lock-Free WAL SPSC Mutation Push via bbqueue)
+        // 7. Candidate 7: StateFS (Honest Full-Cycle WAL SPSC: Push + Drain to MemStore)
         {
             let before_mem = ALLOCATOR.allocated();
+            let mut store = MemStore::new();
+            populate_statefs(&mut store);
             let (mut producer, mut consumer) = create_wal_channel::<65536>();
             let wal_mem = ALLOCATOR.allocated() - before_mem;
 
@@ -412,14 +405,15 @@ fn main() {
             for i in 0..scale {
                 let key = query_keys_statefs[i % query_keys_statefs.len()];
                 let _ = black_box(producer.push_insert(key, &test_val, i as u64));
-                if i % 64 == 0 {
-                    let _ = black_box(consumer.pop_event());
+                if i % 32 == 0 {
+                    let _ = black_box(consumer.drain_to_store(&mut store));
                 }
             }
+            let _ = black_box(consumer.drain_to_store(&mut store));
             let elapsed = start.elapsed().as_nanos();
 
             results.push(BenchResult {
-                candidate: "StateFS (Lock-Free WAL SPSC Push)",
+                candidate: "StateFS (Honest WAL: Push + DrainToStore)",
                 iterations: scale,
                 total_time_ns: elapsed,
                 ns_per_op: (elapsed as f64) / (scale as f64),
@@ -456,6 +450,43 @@ fn main() {
                 ns_per_op: (elapsed as f64) / (scale as f64),
                 ops_per_sec: ((scale as f64) / (elapsed as f64)) * 1_000_000_000.0,
                 heap_bytes: handle_mem,
+            });
+        }
+
+        // 9. Candidate 9: StateFS (Real-World Game Loop: 95% Read + 5% Write with Epoch Invalidation)
+        {
+            let before_mem = ALLOCATOR.allocated();
+            let mut store = MemStore::new();
+            populate_statefs(&mut store);
+            let mut handle_cache = PathHandleCache::<64>::new();
+            let mixed_mem = ALLOCATOR.allocated() - before_mem;
+
+            let mutation_val = Value::from(500);
+            let mutation_path = statefs_core::Path::parse("core/server/settings/tickrate");
+
+            let start = Instant::now();
+            for i in 0..scale {
+                if i % 20 == 0 {
+                    // 5% Writes: update store and invalidate or trigger epoch roll
+                    let _ = store.insert(&mutation_path, mutation_val.clone());
+                } else {
+                    // 95% Reads: safe lookup through handle cache with epoch check
+                    let key = query_keys_statefs[i % query_keys_statefs.len()];
+                    let node = handle_cache
+                        .resolve_or_lookup(&store, key)
+                        .and_then(|h| store.get_by_handle(h));
+                    let _ = black_box(node);
+                }
+            }
+            let elapsed = start.elapsed().as_nanos();
+
+            results.push(BenchResult {
+                candidate: "StateFS (Mixed: 95% Read + 5% Write Loop)",
+                iterations: scale,
+                total_time_ns: elapsed,
+                ns_per_op: (elapsed as f64) / (scale as f64),
+                ops_per_sec: ((scale as f64) / (elapsed as f64)) * 1_000_000_000.0,
+                heap_bytes: mixed_mem,
             });
         }
 
