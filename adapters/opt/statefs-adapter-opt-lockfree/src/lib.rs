@@ -42,6 +42,8 @@ pub enum WalError {
     InvalidPathEncoding,
     /// Failed to apply mutation to target store.
     StoreFailure,
+    /// Monotonic revision violated (event revision went backwards).
+    NonMonotonicRevision { current: u64, previous: u64 },
 }
 
 impl fmt::Display for WalError {
@@ -51,6 +53,12 @@ impl fmt::Display for WalError {
             Self::MalformedFrame => write!(f, "Malformed or truncated binary frame"),
             Self::InvalidPathEncoding => write!(f, "Invalid UTF-8 in WAL path"),
             Self::StoreFailure => write!(f, "Failed to apply WAL mutation to store"),
+            Self::NonMonotonicRevision { current, previous } => {
+                write!(
+                    f,
+                    "Non-monotonic WAL revision: current {current} < previous {previous}"
+                )
+            }
         }
     }
 }
@@ -363,6 +371,7 @@ pub struct WalConsumer<const CAP: usize = DEFAULT_WAL_BUFFER_SIZE> {
         >,
         u16,
     >,
+    last_revision: u64,
 }
 
 /// Creates a linked pair of [`WalProducer`] and [`WalConsumer`] over an inline lock-free BipBuffer.
@@ -370,7 +379,13 @@ pub fn create_wal_channel<const CAP: usize>() -> (WalProducer<CAP>, WalConsumer<
     let bb: Barbacoa<CAP> = Barbacoa::new_with_storage(Inline::new());
     let producer = bb.framed_producer();
     let consumer = bb.framed_consumer();
-    (WalProducer { producer }, WalConsumer { consumer })
+    (
+        WalProducer { producer },
+        WalConsumer {
+            consumer,
+            last_revision: 0,
+        },
+    )
 }
 
 impl<const CAP: usize> WalProducer<CAP> {
@@ -453,6 +468,11 @@ impl<const CAP: usize> WalProducer<CAP> {
 }
 
 impl<const CAP: usize> WalConsumer<CAP> {
+    /// Returns the last processed monotonic revision.
+    pub fn last_revision(&self) -> u64 {
+        self.last_revision
+    }
+
     /// Attempts to read the next mutation event from the WAL ringbuffer.
     ///
     /// Returns `Ok(None)` if no events are currently available.
@@ -463,46 +483,64 @@ impl<const CAP: usize> WalConsumer<CAP> {
             Err(_) => return Err(WalError::MalformedFrame),
         };
 
-        let buf = &*grant;
-        if buf.len() < 11 {
-            return Err(WalError::MalformedFrame);
-        }
-
-        let op_code = buf[0];
-        let revision =
-            u64::from_le_bytes(buf[1..9].try_into().map_err(|_| WalError::MalformedFrame)?);
-        let path_len = u16::from_le_bytes(
-            buf[9..11]
-                .try_into()
-                .map_err(|_| WalError::MalformedFrame)?,
-        ) as usize;
-
-        let mut offset = 11;
-        if buf.len() < offset + path_len {
-            return Err(WalError::MalformedFrame);
-        }
-
-        let path_str = core::str::from_utf8(&buf[offset..offset + path_len])
-            .map_err(|_| WalError::InvalidPathEncoding)?
-            .to_string();
-        offset += path_len;
-
-        let op = match op_code {
-            OP_DELETE => WalOp::Delete { path: path_str },
-            OP_INSERT => {
-                let value = decode_value_from(buf, &mut offset)?;
-                WalOp::Insert {
-                    path: path_str,
-                    value,
-                }
+        let parse_result = (|| -> Result<WalEvent, WalError> {
+            let buf = &*grant;
+            if buf.len() < 11 {
+                return Err(WalError::MalformedFrame);
             }
-            _ => return Err(WalError::MalformedFrame),
-        };
 
-        // Explicitly release the frame back to the BipBuffer
+            let op_code = buf[0];
+            let revision =
+                u64::from_le_bytes(buf[1..9].try_into().map_err(|_| WalError::MalformedFrame)?);
+            let path_len = u16::from_le_bytes(
+                buf[9..11]
+                    .try_into()
+                    .map_err(|_| WalError::MalformedFrame)?,
+            ) as usize;
+
+            let mut offset = 11;
+            if buf.len() < offset + path_len {
+                return Err(WalError::MalformedFrame);
+            }
+
+            let path_str = core::str::from_utf8(&buf[offset..offset + path_len])
+                .map_err(|_| WalError::InvalidPathEncoding)?
+                .to_string();
+            offset += path_len;
+
+            let op = match op_code {
+                OP_DELETE => WalOp::Delete { path: path_str },
+                OP_INSERT => {
+                    let value = decode_value_from(buf, &mut offset)?;
+                    WalOp::Insert {
+                        path: path_str,
+                        value,
+                    }
+                }
+                _ => return Err(WalError::MalformedFrame),
+            };
+
+            if revision < self.last_revision {
+                return Err(WalError::NonMonotonicRevision {
+                    current: revision,
+                    previous: self.last_revision,
+                });
+            }
+
+            Ok(WalEvent { revision, op })
+        })();
+
+        // Explicitly release the frame back to the BipBuffer unconditionally.
+        // This ensures corrupted frames are discarded and never poison-lock the consumer ring.
         grant.release();
 
-        Ok(Some(WalEvent { revision, op }))
+        match parse_result {
+            Ok(event) => {
+                self.last_revision = event.revision;
+                Ok(Some(event))
+            }
+            Err(e) => Err(e),
+        }
     }
 
     /// Drains all available mutations from the WAL stream and applies them directly
@@ -657,5 +695,60 @@ mod tests {
         let (received, last_rev) = cons_handle.join().unwrap();
         assert_eq!(received, TOTAL_EVENTS);
         assert_eq!(last_rev, (TOTAL_EVENTS - 1) as u64);
+    }
+
+    #[test]
+    fn test_non_monotonic_revision_rejected() {
+        let (mut producer, mut consumer) = create_wal_channel::<2048>();
+        producer
+            .push_insert("/server/tickrate", &Value::from(128), 10)
+            .unwrap();
+        let ev1 = consumer.pop_event().unwrap().unwrap();
+        assert_eq!(ev1.revision, 10);
+
+        // Event with revision going backwards (5 < 10)
+        producer
+            .push_insert("/server/tickrate", &Value::from(64), 5)
+            .unwrap();
+        let err = consumer.pop_event();
+        assert_eq!(
+            err,
+            Err(WalError::NonMonotonicRevision {
+                current: 5,
+                previous: 10
+            })
+        );
+    }
+
+    #[test]
+    fn test_corrupt_frame_recovery_never_deadlocks() {
+        let (mut producer, mut consumer) = create_wal_channel::<2048>();
+
+        // Manually write a corrupt frame (less than 11 bytes header)
+        {
+            let mut grant = producer.producer.grant(5).unwrap();
+            grant[0] = OP_INSERT;
+            grant[1..5].copy_from_slice(&[0xFF; 4]);
+            grant.commit(5);
+        }
+
+        // Subsequent valid frame
+        producer
+            .push_insert("/valid/path", &Value::from("hello"), 1)
+            .unwrap();
+
+        // Reading corrupt frame returns MalformedFrame, but releases grant
+        let err = consumer.pop_event();
+        assert_eq!(err, Err(WalError::MalformedFrame));
+
+        // Next read successfully reads the valid frame without being blocked
+        let valid = consumer.pop_event().unwrap().unwrap();
+        assert_eq!(valid.revision, 1);
+        if let WalOp::Insert { path, value } = valid.op {
+            assert_eq!(path, "/valid/path");
+            assert_eq!(value, Value::from("hello"));
+        } else {
+            panic!("expected Insert");
+        }
     }
 }

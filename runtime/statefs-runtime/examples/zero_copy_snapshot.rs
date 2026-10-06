@@ -56,6 +56,32 @@ fn main() {
         "Mapped symbol strings buffer len: {} bytes",
         mmap_backing.string_bytes().len()
     );
+    println!(
+        "Mapped value payload buffer len: {} bytes",
+        mmap_backing.value_bytes().len()
+    );
+
+    // 4. Restore store from snapshot and verify values
+    let restored_store = statefs_codec_bin::restore_snapshot(&snapshot_file).unwrap();
+    assert_eq!(
+        restored_store
+            .get(&Path::parse("/server/name"))
+            .map(|n| &n.value),
+        Some(&Value::from("GoldSrc Dedicated"))
+    );
+    assert_eq!(
+        restored_store
+            .get(&Path::parse("/server/max_clients"))
+            .map(|n| &n.value),
+        Some(&Value::from(32))
+    );
+    assert_eq!(
+        restored_store
+            .get(&Path::parse("/server/map"))
+            .map(|n| &n.value),
+        Some(&Value::from("de_dust2"))
+    );
+    println!("Successfully verified restored store values match original hierarchy!");
 
     let _ = std::fs::remove_file(snapshot_file);
 }

@@ -13,6 +13,7 @@ use crate::error::StoreError;
 use crate::node::Node;
 use crate::path::Path;
 use crate::store::Store;
+use crate::value::Value;
 use alloc::collections::BTreeMap;
 use alloc::string::String;
 use alloc::vec::Vec;
@@ -122,11 +123,29 @@ impl MemStore {
         self.global_revision
     }
 
+    /// Checks if a node or any of its descendants contain an active value.
+    fn has_active_nodes(&self, cur: u32) -> bool {
+        if self.arena[cur as usize].node.is_some() {
+            return true;
+        }
+        let mut child = self.arena[cur as usize].first_child;
+        while child != NULL_IDX {
+            if self.has_active_nodes(child) {
+                return true;
+            }
+            child = self.arena[child as usize].next_sibling;
+        }
+        false
+    }
+
     /// Returns the monotonic revision of the subtree rooted at `path`.
     pub fn subtree_revision(&self, path: &Path) -> Option<u64> {
         let mut cur = 0u32;
         for seg in path.segments() {
             cur = self.find_child(cur, seg)?;
+        }
+        if cur != 0 && !self.has_active_nodes(cur) {
+            return None;
         }
         Some(self.arena[cur as usize].subtree_revision)
     }
@@ -138,6 +157,9 @@ impl MemStore {
             return Some(self.global_revision);
         }
         let node_id = self.find_arena_index(trimmed)?;
+        if node_id != 0 && !self.has_active_nodes(node_id) {
+            return None;
+        }
         Some(self.arena[node_id as usize].subtree_revision)
     }
 
@@ -266,10 +288,12 @@ impl MemStore {
         self.pool.buffer.as_bytes()
     }
 
-    /// Exports all arena nodes as stable [`RawNode`] structs along with interned string bytes.
-    pub fn export_raw_nodes(&self) -> (Vec<crate::backing::RawNode>, &[u8]) {
+    /// Exports all arena nodes as stable [`RawNode`] structs, interned string bytes, and serialized values table.
+    pub fn export_snapshot_parts(&self) -> (Vec<crate::backing::RawNode>, &[u8], Vec<u8>) {
         let mut raw_nodes = Vec::with_capacity(self.arena.len());
-        for (i, arena_node) in self.arena.iter().enumerate() {
+        let mut value_bytes = Vec::new();
+
+        for arena_node in &self.arena {
             let (sym_offset, sym_len) = self
                 .pool
                 .spans
@@ -283,27 +307,140 @@ impl MemStore {
                 .unwrap_or(arena_node.subtree_revision);
 
             let mut flags = 0u32;
-            if let Some(n) = &arena_node.node {
+            let (val_offset, val_len) = if let Some(n) = &arena_node.node {
                 if n.readonly {
                     flags |= 1;
                 }
                 if n.hidden {
                     flags |= 2;
                 }
-            }
+                flags |= 4; // flag 4: node is present
+
+                let start = value_bytes.len() as u32;
+                n.value.encode_into(&mut value_bytes);
+                let len = (value_bytes.len() as u32) - start;
+                (start, len)
+            } else {
+                (0, 0)
+            };
 
             raw_nodes.push(crate::backing::RawNode {
                 symbol_offset: sym_offset,
                 symbol_len: sym_len,
+                value_offset: val_offset,
+                value_len: val_len,
                 first_child: arena_node.first_child,
                 next_sibling: arena_node.next_sibling,
                 revision,
                 flags,
+                _pad: 0,
             });
-            let _ = i;
         }
 
-        (raw_nodes, self.pool.buffer.as_bytes())
+        (raw_nodes, self.pool.buffer.as_bytes(), value_bytes)
+    }
+
+    /// Legacy compatibility wrapper returning (RawNode slice, string bytes).
+    pub fn export_raw_nodes(&self) -> (Vec<crate::backing::RawNode>, &[u8]) {
+        let (nodes, strings, _) = self.export_snapshot_parts();
+        (nodes, strings)
+    }
+
+    /// Restores a full in-memory [`MemStore`] from raw snapshot parts.
+    pub fn from_raw_parts(
+        raw_nodes: &[crate::backing::RawNode],
+        strings: &[u8],
+        values: &[u8],
+    ) -> Result<Self, StoreError> {
+        if raw_nodes.is_empty() {
+            return Err(StoreError::Conflict(alloc::string::String::from(
+                "Snapshot contains no root node",
+            )));
+        }
+
+        let str_slice = core::str::from_utf8(strings).map_err(|_| {
+            StoreError::Conflict(alloc::string::String::from("Invalid UTF-8 string pool"))
+        })?;
+
+        let mut pool = StringPool::new();
+        let mut symbol_map = Vec::with_capacity(raw_nodes.len());
+
+        for (i, raw) in raw_nodes.iter().enumerate() {
+            let start = raw.symbol_offset as usize;
+            let len = raw.symbol_len as usize;
+            let end = start.checked_add(len).ok_or_else(|| {
+                StoreError::Conflict(alloc::string::String::from("Symbol offset overflow"))
+            })?;
+
+            if end > str_slice.len() {
+                return Err(StoreError::Conflict(alloc::string::String::from(
+                    "Symbol offset out of bounds",
+                )));
+            }
+
+            let sym_str = &str_slice[start..end];
+            let sym = if i == 0 && sym_str.is_empty() {
+                pool.intern("")
+            } else {
+                pool.intern(sym_str)
+            };
+            symbol_map.push(sym);
+        }
+
+        let mut arena = Vec::with_capacity(raw_nodes.len());
+        let mut max_rev = 0u64;
+
+        for (i, raw) in raw_nodes.iter().enumerate() {
+            let node_payload = if (raw.flags & 4) != 0 && raw.value_len > 0 {
+                let v_start = raw.value_offset as usize;
+                let v_len = raw.value_len as usize;
+                let v_end = v_start.checked_add(v_len).ok_or_else(|| {
+                    StoreError::Conflict(alloc::string::String::from("Value offset overflow"))
+                })?;
+
+                if v_end > values.len() {
+                    return Err(StoreError::Conflict(alloc::string::String::from(
+                        "Value offset out of bounds",
+                    )));
+                }
+
+                let mut offset = v_start;
+                let val = Value::decode_from(values, &mut offset).ok_or_else(|| {
+                    StoreError::Conflict(alloc::string::String::from(
+                        "Corrupted value payload in snapshot",
+                    ))
+                })?;
+
+                let readonly = (raw.flags & 1) != 0;
+                let hidden = (raw.flags & 2) != 0;
+                Some(Node {
+                    value: val,
+                    revision: raw.revision,
+                    readonly,
+                    hidden,
+                })
+            } else {
+                None
+            };
+
+            if raw.revision > max_rev {
+                max_rev = raw.revision;
+            }
+
+            arena.push(ArenaNode {
+                symbol: symbol_map[i],
+                node: node_payload,
+                first_child: raw.first_child,
+                next_sibling: raw.next_sibling,
+                subtree_revision: raw.revision,
+            });
+        }
+
+        Ok(Self {
+            arena,
+            pool,
+            global_revision: max_rev,
+        })
     }
 
     fn find_child(&self, parent_idx: u32, segment: &str) -> Option<u32> {

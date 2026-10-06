@@ -4,27 +4,23 @@
 //! transmuting bytes into `[RawNode]` slices safely via `zerocopy` without runtime parsing.
 
 use memmap2::Mmap;
-use statefs_core::backing::{RawNode, StorageBacking};
+use statefs_core::backing::{RawNode, SNAPSHOT_MAGIC, SNAPSHOT_VERSION, StorageBacking};
 use std::fs::File;
 use std::io;
 use std::path::Path;
 use zerocopy::{FromBytes, Immutable, IntoBytes, KnownLayout};
 
-/// Header placed at the beginning of a StateFS binary snapshot file.
-/// Aligned to 32 bytes to ensure subsequent `RawNode` slices remain 8-byte aligned.
+/// Memory-mapped snapshot header for zerocopy prefix reading.
 #[repr(C)]
 #[derive(Debug, Clone, Copy, FromBytes, IntoBytes, KnownLayout, Immutable)]
-pub struct SnapshotHeader {
+pub struct MmapSnapshotHeader {
     pub magic: [u8; 8], // b"STATEFS\0"
-    pub version: u32,   // 1
+    pub version: u32,   // 2
     pub node_count: u32,
     pub string_bytes_len: u32,
-    pub reserved: u32,
+    pub value_bytes_len: u32,
     pub _pad: [u8; 8], // 8 + 4 + 4 + 4 + 4 + 8 = 32 bytes (8-byte aligned offset)
 }
-
-pub const SNAPSHOT_MAGIC: [u8; 8] = *b"STATEFS\0";
-pub const SNAPSHOT_VERSION: u32 = 1;
 
 /// Memory-mapped file backing provider implementing [`StorageBacking`].
 pub struct MmapStorageBacking {
@@ -33,6 +29,8 @@ pub struct MmapStorageBacking {
     node_count: usize,
     string_offset: usize,
     string_len: usize,
+    value_offset: usize,
+    value_len: usize,
 }
 
 impl MmapStorageBacking {
@@ -41,7 +39,7 @@ impl MmapStorageBacking {
         let file = File::open(path)?;
         let mmap = unsafe { Mmap::map(&file)? };
 
-        if mmap.len() < size_of::<SnapshotHeader>() {
+        if mmap.len() < size_of::<MmapSnapshotHeader>() {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
                 "File too small for StateFS snapshot header",
@@ -49,7 +47,7 @@ impl MmapStorageBacking {
         }
 
         // Parse header via zerocopy
-        let (header_ref, _) = SnapshotHeader::ref_from_prefix(&mmap[..])
+        let (header_ref, _) = MmapSnapshotHeader::ref_from_prefix(&mmap[..])
             .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "Invalid header alignment"))?;
 
         if header_ref.magic != SNAPSHOT_MAGIC {
@@ -69,7 +67,7 @@ impl MmapStorageBacking {
             ));
         }
 
-        let header_size = size_of::<SnapshotHeader>();
+        let header_size = size_of::<MmapSnapshotHeader>();
         let node_count = header_ref.node_count as usize;
         let node_size = size_of::<RawNode>();
 
@@ -83,8 +81,13 @@ impl MmapStorageBacking {
             .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "Offset overflow"))?;
 
         let string_len = header_ref.string_bytes_len as usize;
-        let total_required = string_offset
+        let value_offset = string_offset
             .checked_add(string_len)
+            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "String offset overflow"))?;
+
+        let value_len = header_ref.value_bytes_len as usize;
+        let total_required = value_offset
+            .checked_add(value_len)
             .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "Total size overflow"))?;
 
         if mmap.len() < total_required {
@@ -94,13 +97,79 @@ impl MmapStorageBacking {
             ));
         }
 
-        Ok(Self {
+        let backing = Self {
             mmap,
             node_offset,
             node_count,
             string_offset,
             string_len,
-        })
+            value_offset,
+            value_len,
+        };
+
+        // Audit check: validate all nodes and bounds to prevent OOB or segfaults on corrupt files
+        backing.validate()?;
+
+        Ok(backing)
+    }
+
+    /// Validates the structural integrity and bounds of nodes, symbols, and values.
+    pub fn validate(&self) -> io::Result<()> {
+        let nodes = self.nodes();
+        let string_len = self.string_len;
+        let value_len = self.value_len;
+
+        for (i, node) in nodes.iter().enumerate() {
+            // Validate symbol boundaries
+            let s_start = node.symbol_offset as usize;
+            let s_len = node.symbol_len as usize;
+            let s_end = s_start.checked_add(s_len).ok_or_else(|| {
+                io::Error::new(io::ErrorKind::InvalidData, "Symbol offset overflow")
+            })?;
+            if s_end > string_len {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!("Node {i} symbol offset out of bounds ({s_end} > {string_len})"),
+                ));
+            }
+
+            // Validate value payload boundaries if present
+            if (node.flags & 4) != 0 && node.value_len > 0 {
+                let v_start = node.value_offset as usize;
+                let v_l = node.value_len as usize;
+                let v_end = v_start.checked_add(v_l).ok_or_else(|| {
+                    io::Error::new(io::ErrorKind::InvalidData, "Value offset overflow")
+                })?;
+                if v_end > value_len {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        format!("Node {i} value offset out of bounds ({v_end} > {value_len})"),
+                    ));
+                }
+            }
+
+            // Validate tree links
+            if node.first_child != u32::MAX && node.first_child as usize >= nodes.len() {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!(
+                        "Node {i} first_child index out of bounds: {}",
+                        node.first_child
+                    ),
+                ));
+            }
+            if node.next_sibling != u32::MAX && node.next_sibling as usize >= nodes.len() {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!(
+                        "Node {i} next_sibling index out of bounds: {}",
+                        node.next_sibling
+                    ),
+                ));
+            }
+        }
+
+        Ok(())
     }
 }
 
@@ -119,5 +188,9 @@ impl StorageBacking for MmapStorageBacking {
 
     fn string_bytes(&self) -> &[u8] {
         &self.mmap[self.string_offset..self.string_offset + self.string_len]
+    }
+
+    fn value_bytes(&self) -> &[u8] {
+        &self.mmap[self.value_offset..self.value_offset + self.value_len]
     }
 }

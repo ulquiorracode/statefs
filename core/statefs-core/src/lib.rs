@@ -27,7 +27,7 @@ pub mod store;
 pub mod value;
 pub mod watch;
 
-pub use backing::{RawNode, StorageBacking};
+pub use backing::{RawNode, SNAPSHOT_MAGIC, SNAPSHOT_VERSION, SnapshotHeader, StorageBacking};
 pub use error::StoreError;
 pub use glob::match_glob;
 pub use mem::MemStore;
@@ -118,6 +118,18 @@ mod tests {
             .insert(&Path::parse("/server/physics/gravity"), Value::from(800.0))
             .unwrap();
         assert!(watcher.poll_changed(&store));
+
+        // Node deletion in subtree: watcher must detect deletion
+        let mut gravity_watcher =
+            SubtreeWatcher::attach(&store, Path::parse("/server/physics/gravity"));
+        assert!(gravity_watcher.exists());
+        assert!(!gravity_watcher.poll_changed(&store));
+
+        store
+            .remove(&Path::parse("/server/physics/gravity"))
+            .unwrap();
+        assert!(gravity_watcher.poll_changed(&store));
+        assert!(!gravity_watcher.exists());
     }
 
     #[test]

@@ -11,5 +11,8 @@ categories = ["encoding"]
 
 [dependencies]
 statefs-core = { path = "../../core/statefs-core" }
-statefs-adapter-opt-mmap = { path = "../../adapters/opt/statefs-adapter-opt-mmap" }
 zerocopy = { version = "0.8", features = ["derive"] }
+
+[dev-dependencies]
+statefs-adapter-opt-mmap = { path = "../../adapters/opt/statefs-adapter-opt-mmap" }
+

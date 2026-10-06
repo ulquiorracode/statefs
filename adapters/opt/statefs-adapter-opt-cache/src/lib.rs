@@ -35,13 +35,28 @@ pub fn fast_path_hash(path: &str) -> u64 {
     hash
 }
 
-/// A cache entry storing the path hash, corresponding node ID, and generation epoch.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+/// A cache entry storing the path hash, corresponding node ID, exact path bytes, and generation epoch.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct CacheSlot {
     pub hash: u64,
     pub node_id: u32,
     pub epoch: u64,
+    pub path_len: u16,
+    pub path_buf: [u8; 64],
     pub valid: bool,
+}
+
+impl Default for CacheSlot {
+    fn default() -> Self {
+        Self {
+            hash: 0,
+            node_id: 0,
+            epoch: 0,
+            path_len: 0,
+            path_buf: [0u8; 64],
+            valid: false,
+        }
+    }
 }
 
 /// L1 Direct-Mapped Path Cache with compile-time inline capacity.
@@ -67,33 +82,44 @@ impl<const CAP: usize> L1PathCache<CAP> {
                 hash: 0,
                 node_id: 0,
                 epoch: 0,
+                path_len: 0,
+                path_buf: [0u8; 64],
                 valid: false,
             }; CAP],
         }
     }
 
-    /// Looks up a cached `node_id` by raw path string without epoch check.
+    /// Looks up a cached `node_id` verifying exact path match.
     #[inline(always)]
     pub fn get(&self, path: &str) -> Option<u32> {
         let hash = fast_path_hash(path);
         let idx = (hash as usize) & (CAP - 1);
         let slot = &self.slots[idx];
 
-        if slot.valid && slot.hash == hash {
+        if slot.valid
+            && slot.hash == hash
+            && slot.path_len as usize == path.len()
+            && &slot.path_buf[..slot.path_len as usize] == path.as_bytes()
+        {
             Some(slot.node_id)
         } else {
             None
         }
     }
 
-    /// Looks up a cached `node_id` verifying current store epoch / global revision.
+    /// Looks up a cached `node_id` verifying exact path match and current store epoch.
     #[inline(always)]
     pub fn get_with_epoch(&self, path: &str, current_epoch: u64) -> Option<u32> {
         let hash = fast_path_hash(path);
         let idx = (hash as usize) & (CAP - 1);
         let slot = &self.slots[idx];
 
-        if slot.valid && slot.hash == hash && slot.epoch == current_epoch {
+        if slot.valid
+            && slot.hash == hash
+            && slot.epoch == current_epoch
+            && slot.path_len as usize == path.len()
+            && &slot.path_buf[..slot.path_len as usize] == path.as_bytes()
+        {
             Some(slot.node_id)
         } else {
             None
@@ -106,17 +132,24 @@ impl<const CAP: usize> L1PathCache<CAP> {
         self.put_with_epoch(path, node_id, 0);
     }
 
-    /// Stores a resolved `node_id` along with store epoch.
+    /// Stores a resolved `node_id` along with store epoch, verifying bounds.
     #[inline(always)]
     pub fn put_with_epoch(&mut self, path: &str, node_id: u32, epoch: u64) {
-        let hash = fast_path_hash(path);
-        let idx = (hash as usize) & (CAP - 1);
-        self.slots[idx] = CacheSlot {
-            hash,
-            node_id,
-            epoch,
-            valid: true,
-        };
+        let path_len = path.len();
+        if path_len <= 64 {
+            let hash = fast_path_hash(path);
+            let idx = (hash as usize) & (CAP - 1);
+            let mut path_buf = [0u8; 64];
+            path_buf[..path_len].copy_from_slice(path.as_bytes());
+            self.slots[idx] = CacheSlot {
+                hash,
+                node_id,
+                epoch,
+                path_len: path_len as u16,
+                path_buf,
+                valid: true,
+            };
+        }
     }
 
     /// Invalidates all entries in the cache (e.g. after a tree mutation).
@@ -154,5 +187,15 @@ mod tests {
 
         // Stale epoch (e.g. store mutated to revision 2) misses safely
         assert_eq!(cache.get_with_epoch("/server/tickrate", 2), None);
+    }
+
+    #[test]
+    fn test_cache_hash_collision_protection() {
+        let mut cache = L1PathCache::<2>::new();
+        cache.put("/path/a", 100);
+
+        // Querying /path/b which might collide in a 2-slot table must not return /path/a's node_id
+        assert_eq!(cache.get("/path/b"), None);
+        assert_eq!(cache.get("/path/a"), Some(100));
     }
 }

@@ -45,6 +45,7 @@ impl PrefixTokenizer {
     }
 
     /// Attempts to compress an inline path by substituting matching prefixes.
+    /// If the path starts with `~` without matching a prefix, it is escaped as `~~` to prevent collisions.
     pub fn compress_inline(&self, path: &mut InlinePath) {
         let s = path.as_str();
         for entry in &self.entries {
@@ -63,11 +64,32 @@ impl PrefixTokenizer {
                 }
             }
         }
+
+        // If path starts with literal `~`, escape it as `~~`
+        if s.starts_with('~') && s.len() < 256 {
+            let mut temp = [0u8; 256];
+            temp[0] = b'~';
+            temp[1..1 + s.len()].copy_from_slice(s.as_bytes());
+            if let Ok(new_str) = core::str::from_utf8(&temp[..1 + s.len()]) {
+                path.set(new_str);
+            }
+        }
     }
 
     /// Expands a tokenized inline path back to its full canonical prefix.
+    /// Also unescapes leading `~~` back to `~`.
     pub fn expand_inline(&self, path: &mut InlinePath) {
         let bytes = path.as_str().as_bytes();
+        if bytes.len() >= 2 && bytes[0] == b'~' && bytes[1] == b'~' {
+            let unescaped_len = bytes.len() - 1;
+            let mut temp = [0u8; 256];
+            temp[..unescaped_len].copy_from_slice(&bytes[1..]);
+            if let Ok(unescaped) = core::str::from_utf8(&temp[..unescaped_len]) {
+                path.set(unescaped);
+                return;
+            }
+        }
+
         if bytes.len() >= 3 && bytes[0] == b'~' && bytes[2] == b'/' {
             let token = bytes[1];
             for entry in &self.entries {
@@ -121,5 +143,16 @@ mod tests {
         let mut path = InlinePath::from_raw("client/graphics/fov");
         tokenizer.compress_inline(&mut path);
         assert_eq!(path.as_str(), "client/graphics/fov");
+    }
+
+    #[test]
+    fn test_tilde_path_roundtrip() {
+        let tokenizer = PrefixTokenizer::new().register_prefix(b'S', "server/settings/");
+        let mut path = InlinePath::from_raw("~user/profile");
+        tokenizer.compress_inline(&mut path);
+        assert_eq!(path.as_str(), "~~user/profile");
+
+        tokenizer.expand_inline(&mut path);
+        assert_eq!(path.as_str(), "~user/profile");
     }
 }

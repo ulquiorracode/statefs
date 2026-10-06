@@ -101,6 +101,11 @@ impl VfsMountHub {
     /// Finds the matching provider and strips the prefix.
     fn resolve_mount<'h, 'p>(&'h self, clean: &'p str) -> Option<(&'h dyn VfsProvider, &'p str)> {
         for entry in &self.mounts {
+            if entry.prefix == "/" {
+                // Root mount matches all paths; relative path is clean without leading slash
+                let rel = clean.strip_prefix('/').unwrap_or(clean);
+                return Some((entry.provider.as_ref(), rel));
+            }
             if clean == entry.prefix {
                 return Some((entry.provider.as_ref(), ""));
             }
@@ -175,21 +180,27 @@ impl VfsOverlay {
 
 impl VfsProvider for VfsOverlay {
     fn read_file(&self, relative_path: &str) -> Result<Vec<u8>, VfsError> {
+        let last_err = VfsError::NotFound(String::from(relative_path));
         for layer in &self.layers {
-            if let Ok(bytes) = layer.read_file(relative_path) {
-                return Ok(bytes);
+            match layer.read_file(relative_path) {
+                Ok(bytes) => return Ok(bytes),
+                Err(VfsError::NotFound(_)) => continue,
+                Err(err) => return Err(err),
             }
         }
-        Err(VfsError::NotFound(String::from(relative_path)))
+        Err(last_err)
     }
 
     fn metadata(&self, relative_path: &str) -> Result<VfsMetadata, VfsError> {
+        let last_err = VfsError::NotFound(String::from(relative_path));
         for layer in &self.layers {
-            if let Ok(meta) = layer.metadata(relative_path) {
-                return Ok(meta);
+            match layer.metadata(relative_path) {
+                Ok(meta) => return Ok(meta),
+                Err(VfsError::NotFound(_)) => continue,
+                Err(err) => return Err(err),
             }
         }
-        Err(VfsError::NotFound(String::from(relative_path)))
+        Err(last_err)
     }
 
     fn list_dir(&self, relative_path: &str) -> Result<Vec<String>, VfsError> {
@@ -197,13 +208,17 @@ impl VfsProvider for VfsOverlay {
         let mut any_found = false;
 
         for layer in &self.layers {
-            if let Ok(entries) = layer.list_dir(relative_path) {
-                any_found = true;
-                for entry in entries {
-                    if !combined.contains(&entry) {
-                        combined.push(entry);
+            match layer.list_dir(relative_path) {
+                Ok(entries) => {
+                    any_found = true;
+                    for entry in entries {
+                        if !combined.contains(&entry) {
+                            combined.push(entry);
+                        }
                     }
                 }
+                Err(VfsError::NotFound(_)) => continue,
+                Err(err) => return Err(err),
             }
         }
 
@@ -225,37 +240,9 @@ fn normalize_prefix(prefix: &str) -> String {
     }
 }
 
-/// Cleans path separators and removes redundant slashes.
+/// Cleans path separators and removes redundant slashes, preserving valid UTF-8.
 pub fn clean_path(path: &str) -> String {
-    let mut out = String::with_capacity(path.len() + 1);
-    let bytes = path.as_bytes();
-    let mut i = 0;
-
-    // Ensure leading slash
-    if !path.starts_with('/') && !path.starts_with('\\') {
-        out.push('/');
-    }
-
-    while i < bytes.len() {
-        let b = bytes[i];
-        if b == b'/' || b == b'\\' {
-            // Push single slash and skip consecutive slashes
-            out.push('/');
-            while i < bytes.len() && (bytes[i] == b'/' || bytes[i] == b'\\') {
-                i += 1;
-            }
-        } else {
-            out.push(b as char);
-            i += 1;
-        }
-    }
-
-    // Strip trailing slash if longer than 1 character
-    if out.len() > 1 && out.ends_with('/') {
-        out.pop();
-    }
-
-    out
+    statefs_core::Path::parse(path).to_string()
 }
 
 #[cfg(test)]
@@ -355,5 +342,66 @@ mod tests {
         // crossfire falls back to base layer
         let cross = overlay.read_file("maps/crossfire.bsp").unwrap();
         assert_eq!(cross, vec![4, 5, 6]);
+    }
+
+    #[test]
+    fn test_vfs_root_mount() {
+        let mut hub = VfsMountHub::new();
+        let mut root_provider = MemoryMockProvider {
+            files: BTreeMap::new(),
+        };
+        root_provider
+            .files
+            .insert(String::from("autoexec.cfg"), b"fps_max 144".to_vec());
+        root_provider
+            .files
+            .insert(String::from("sub/deep.cfg"), b"cl_cmdrate 101".to_vec());
+
+        hub.mount("/", root_provider);
+
+        // Root files must resolve with leading slash stripped
+        let content1 = hub.read_file("/autoexec.cfg").unwrap();
+        assert_eq!(content1, b"fps_max 144");
+
+        // Sub-paths under root must resolve
+        let content2 = hub.read_file("/sub/deep.cfg").unwrap();
+        assert_eq!(content2, b"cl_cmdrate 101");
+    }
+
+    struct DenyingProvider;
+
+    impl VfsProvider for DenyingProvider {
+        fn read_file(&self, _relative_path: &str) -> Result<Vec<u8>, VfsError> {
+            Err(VfsError::AccessDenied(String::from("Forbidden")))
+        }
+
+        fn metadata(&self, _relative_path: &str) -> Result<VfsMetadata, VfsError> {
+            Err(VfsError::AccessDenied(String::from("Forbidden")))
+        }
+
+        fn list_dir(&self, _relative_path: &str) -> Result<Vec<String>, VfsError> {
+            Err(VfsError::AccessDenied(String::from("Forbidden")))
+        }
+    }
+
+    #[test]
+    fn test_vfs_overlay_access_denied_never_falls_through() {
+        let mut base_layer = MemoryMockProvider {
+            files: BTreeMap::new(),
+        };
+        base_layer
+            .files
+            .insert(String::from("secret.cfg"), b"admin_password".to_vec());
+
+        let mut overlay = VfsOverlay::new();
+        overlay.push_bottom(base_layer);
+        overlay.push_top(DenyingProvider);
+
+        // AccessDenied from top layer must NOT fall through to reveal base layer secret
+        let result = overlay.read_file("secret.cfg");
+        assert_eq!(
+            result,
+            Err(VfsError::AccessDenied(String::from("Forbidden")))
+        );
     }
 }
