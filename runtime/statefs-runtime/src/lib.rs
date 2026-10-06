@@ -85,10 +85,12 @@ impl<const CAP: usize> QueryScenarioResolver<CAP> {
         self.metrics.total_queries = self.metrics.total_queries.saturating_add(1);
 
         if intent.scenario == WorkloadScenario::SteadyStateLoop {
-            let current_epoch = self.store.global_revision();
-            if let Some(cached_node_id) = self.cache.get_with_epoch(intent.path, current_epoch) {
+            let current_epoch = self.store.subtree_revision_str(intent.path).unwrap_or(0);
+            if let Some(cached_node_id) = self.cache.get_with_epoch(intent.path, current_epoch)
+                && let Some(node) = self.store.get_by_id(cached_node_id)
+            {
                 self.metrics.cache_hits = self.metrics.cache_hits.saturating_add(1);
-                return self.store.get_by_id(cached_node_id);
+                return Some(node);
             }
 
             self.metrics.cache_misses = self.metrics.cache_misses.saturating_add(1);
@@ -205,5 +207,37 @@ mod tests {
         // 6. Fourth lookup must safely return None rather than stale-reading or panicking
         let node4 = resolver.resolve_query(QueryIntent::hot_loop("/server/tickrate"));
         assert!(node4.is_none());
+    }
+
+    #[test]
+    fn test_resolver_thundering_miss_prevention() {
+        let mut store = MemStore::new();
+        store
+            .insert(&Path::parse("/server/tickrate"), Value::Int(128))
+            .expect("insert tickrate");
+
+        let mut resolver = store.with_l1_cache::<64>();
+
+        // Pre-warm cache for /server/tickrate
+        let _ = resolver.resolve_query(QueryIntent::hot_loop("/server/tickrate"));
+        assert_eq!(resolver.metrics.cache_misses, 1);
+        assert_eq!(resolver.metrics.cache_hits, 0);
+
+        // Mutate an unrelated subtree: /plugins/moderation/ban_time
+        resolver
+            .store
+            .insert(
+                &Path::parse("/plugins/moderation/ban_time"),
+                Value::Int(300),
+            )
+            .expect("insert moderation");
+
+        // Querying /server/tickrate MUST NOT suffer a thundering miss!
+        let node = resolver
+            .resolve_query(QueryIntent::hot_loop("/server/tickrate"))
+            .expect("tickrate lookup");
+        assert_eq!(node.value.as_int(), Some(128));
+        assert_eq!(resolver.metrics.cache_misses, 1); // Miss count did NOT increase!
+        assert_eq!(resolver.metrics.cache_hits, 1); // Hit count increased!
     }
 }

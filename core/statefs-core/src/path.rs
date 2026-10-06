@@ -139,15 +139,16 @@ impl Path {
         &self.segments
     }
 
-    /// Appends a sub-path or segment, returning a new `Path`.
+    /// Appends a sub-path or segment using standard separators (`/` and `\`), returning a new `Path`.
     pub fn join(&self, sub: impl AsRef<str>) -> Self {
+        self.join_with_options(sub, &PathOptions::DEFAULT)
+    }
+
+    /// Appends a sub-path or segment using explicit options, returning a new `Path`.
+    pub fn join_with_options(&self, sub: impl AsRef<str>, options: &PathOptions) -> Self {
+        let sub_path = Self::parse_with_options(sub.as_ref(), options);
         let mut new_path = self.clone();
-        for part in sub.as_ref().split(['/', '\\', '.']) {
-            let seg = part.trim();
-            if !seg.is_empty() {
-                new_path.segments.push(seg.to_owned());
-            }
-        }
+        new_path.segments.extend(sub_path.segments);
         new_path
     }
 
@@ -261,6 +262,16 @@ mod tests {
         let joined = parent.join("c/d");
         assert_eq!(joined.to_string(), "/a/b/c/d");
         assert_eq!(joined.leaf(), Some("d"));
+
+        // Verify grammar consistency: dot is not split by default
+        let dotted_parse = Path::parse("a.b");
+        assert_eq!(dotted_parse.segments(), &["a.b"]);
+        let dotted_join = Path::parse("a").join("b.c");
+        assert_eq!(dotted_join.segments(), &["a", "b.c"]);
+
+        // Explicit dot notation splits on dot
+        let dotted_opt = Path::parse("a").join_with_options("b.c", &PathOptions::DOT_NOTATION);
+        assert_eq!(dotted_opt.segments(), &["a", "b", "c"]);
     }
 
     #[test]

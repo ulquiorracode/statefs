@@ -8,8 +8,11 @@
 use crate::mem::MemStore;
 use crate::node::Node;
 use crate::path::Path;
-use alloc::string::String;
+use alloc::borrow::ToOwned;
 use alloc::vec::Vec;
+
+/// Maximum recursion depth allowed during glob traversal to prevent stack exhaustion.
+const MAX_GLOB_DEPTH: usize = 64;
 
 /// Matches state tree nodes against a glob pattern.
 ///
@@ -42,16 +45,14 @@ fn walk<'a>(
     current_path: &mut Vec<&'a str>,
     results: &mut Vec<(Path, &'a Node)>,
 ) {
+    if current_path.len() >= MAX_GLOB_DEPTH {
+        return;
+    }
+
     if pattern_idx == pattern.len() {
         if let Some(node) = store.node_value(current_node) {
-            let mut full = String::from("/");
-            for (i, seg) in current_path.iter().enumerate() {
-                if i > 0 {
-                    full.push('/');
-                }
-                full.push_str(seg);
-            }
-            results.push((Path::parse(&full), node));
+            let path = Path::from_segments(current_path.iter().map(|&s| s.to_owned()));
+            results.push((path, node));
         }
         return;
     }

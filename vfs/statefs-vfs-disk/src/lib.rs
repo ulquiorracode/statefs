@@ -58,28 +58,32 @@ impl DiskMount {
         }
 
         let joined = self.root_path.join(rel_path);
-
-        // If path exists, verify canonical path prefix matches root
-        if joined.exists() {
-            let canon = joined
-                .canonicalize()
-                .map_err(|e| VfsError::Io(e.to_string()))?;
-            if !canon.starts_with(&self.root_path) {
-                return Err(VfsError::AccessDenied(format!(
-                    "Path escapes root sandbox: {rel}"
-                )));
+        let canon = match joined.canonicalize() {
+            Ok(c) => c,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                return Err(VfsError::NotFound(String::from(rel)));
             }
-            Ok(canon)
-        } else {
-            Ok(joined)
+            Err(e) => return Err(VfsError::Io(e.to_string())),
+        };
+
+        if !canon.starts_with(&self.root_path) {
+            return Err(VfsError::AccessDenied(format!(
+                "Path escapes root sandbox: {rel}"
+            )));
         }
+
+        Ok(canon)
     }
 }
 
 impl VfsProvider for DiskMount {
     fn read_file(&self, relative_path: &str) -> Result<Vec<u8>, VfsError> {
         let safe_target = self.resolve_safe_path(relative_path)?;
-        if !safe_target.exists() || safe_target.is_dir() {
+        let meta = fs::metadata(&safe_target).map_err(|e| match e.kind() {
+            std::io::ErrorKind::NotFound => VfsError::NotFound(String::from(relative_path)),
+            _ => VfsError::Io(e.to_string()),
+        })?;
+        if meta.is_dir() {
             return Err(VfsError::NotFound(String::from(relative_path)));
         }
 
@@ -88,11 +92,10 @@ impl VfsProvider for DiskMount {
 
     fn metadata(&self, relative_path: &str) -> Result<VfsMetadata, VfsError> {
         let safe_target = self.resolve_safe_path(relative_path)?;
-        if !safe_target.exists() {
-            return Err(VfsError::NotFound(String::from(relative_path)));
-        }
-
-        let meta = fs::metadata(&safe_target).map_err(|e| VfsError::Io(e.to_string()))?;
+        let meta = fs::metadata(&safe_target).map_err(|e| match e.kind() {
+            std::io::ErrorKind::NotFound => VfsError::NotFound(String::from(relative_path)),
+            _ => VfsError::Io(e.to_string()),
+        })?;
         Ok(VfsMetadata {
             is_dir: meta.is_dir(),
             size_bytes: meta.len(),
@@ -100,8 +103,16 @@ impl VfsProvider for DiskMount {
     }
 
     fn list_dir(&self, relative_path: &str) -> Result<Vec<String>, VfsError> {
-        let safe_target = self.resolve_safe_path(relative_path)?;
-        if !safe_target.exists() || !safe_target.is_dir() {
+        let safe_target = if relative_path.is_empty() {
+            self.root_path.clone()
+        } else {
+            self.resolve_safe_path(relative_path)?
+        };
+        let meta = fs::metadata(&safe_target).map_err(|e| match e.kind() {
+            std::io::ErrorKind::NotFound => VfsError::NotFound(String::from(relative_path)),
+            _ => VfsError::Io(e.to_string()),
+        })?;
+        if !meta.is_dir() {
             return Err(VfsError::NotFound(String::from(relative_path)));
         }
 
