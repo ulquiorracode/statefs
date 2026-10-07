@@ -1,0 +1,20 @@
+[package]
+name = "statefs-adapter-bridge-http"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Axum and Tower HTTP Live State and Configuration Inspector for StateFS"
+
+[dependencies]
+statefs-core = { path = "../../../core/statefs-core", version = "0.1.0" }
+statefs-codec-json = { path = "../../../codecs/statefs-codec-json", version = "0.1.0" }
+axum = { version = "0.8", default-features = false, features = ["tokio", "json"] }
+serde_json = "1.0"
+tokio = { version = "1", features = ["sync"] }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["full"] }
+tower = { version = "0.5", features = ["util"] }
+http-body-util = "0.1"
