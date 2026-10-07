@@ -225,6 +225,7 @@ impl From<String> for Path {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use alloc::string::ToString;
 
     #[test]
     fn test_path_parse_and_display() {

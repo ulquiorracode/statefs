@@ -84,6 +84,7 @@ impl StateFs {
 }
 
 /// Fluent builder for composing StateFS hierarchical stores from multiple pluggable sources.
+#[derive(Debug)]
 pub struct StateFsBuilder {
     store: MemStore,
 }
@@ -112,6 +113,18 @@ impl StateFsBuilder {
     pub fn with_value(mut self, path: &str, value: impl Into<Value>) -> Result<Self, StateFsError> {
         let p = Path::parse(path);
         self.store.insert(&p, value.into())?;
+        Ok(self)
+    }
+
+    /// Manually inserts a read-only value at the specified path to enforce immutable overrides.
+    pub fn with_readonly_value(
+        mut self,
+        path: &str,
+        value: impl Into<Value>,
+    ) -> Result<Self, StateFsError> {
+        let p = Path::parse(path);
+        let node = statefs_core::Node::read_only(value.into());
+        self.store.insert_node(&p, node)?;
         Ok(self)
     }
 
@@ -161,19 +174,38 @@ impl StateFsBuilder {
         Ok(self)
     }
 
-    /// Restores store state from an in-memory binary snapshot slice.
+    /// Restores or merges store state from an in-memory binary snapshot slice.
     #[cfg(feature = "snapshot")]
     pub fn with_snapshot_bytes(mut self, bytes: &[u8]) -> Result<Self, StateFsError> {
-        self.store =
+        let snapshot_store =
             statefs_codec_bin::restore_snapshot_bytes(bytes).map_err(StateFsError::Snapshot)?;
+        self.merge_snapshot(snapshot_store)?;
         Ok(self)
     }
 
-    /// Restores store state from a binary snapshot file.
+    /// Restores or merges store state from a binary snapshot file.
     #[cfg(all(feature = "snapshot", feature = "std"))]
     pub fn with_snapshot_file<P: AsRef<StdPath>>(mut self, path: P) -> Result<Self, StateFsError> {
-        self.store = statefs_codec_bin::restore_snapshot(path).map_err(StateFsError::Snapshot)?;
+        let snapshot_store =
+            statefs_codec_bin::restore_snapshot(path).map_err(StateFsError::Snapshot)?;
+        self.merge_snapshot(snapshot_store)?;
         Ok(self)
+    }
+
+    #[cfg(feature = "snapshot")]
+    fn merge_snapshot(&mut self, snapshot_store: MemStore) -> Result<(), StateFsError> {
+        let is_empty = self.store.arena_len() <= 1 && self.store.get(&Path::root()).is_none();
+        if is_empty {
+            self.store = snapshot_store;
+        } else {
+            if let Some(root_node) = snapshot_store.get(&Path::root()) {
+                self.store.insert_node(&Path::root(), root_node.clone())?;
+            }
+            for (path, node) in snapshot_store.find_glob("/**") {
+                self.store.insert_node(&path, node.clone())?;
+            }
+        }
+        Ok(())
     }
 
     /// Consumes the builder and returns the populated [`MemStore`].

@@ -245,6 +245,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(all(feature = "toml", feature = "json"))]
     fn test_statefs_builder_composition() {
         let store = StateFs::builder()
             .with_toml_str(
@@ -292,5 +293,104 @@ mod tests {
                 .and_then(|n| n.value.as_int()),
             Some(42)
         );
+    }
+
+    #[test]
+    #[cfg(all(feature = "snapshot", feature = "toml"))]
+    fn test_builder_layering_and_snapshot_merge() {
+        // Prepare a binary snapshot
+        let mut snap_store = StateFs::new_store();
+        snap_store
+            .insert(
+                &statefs_core::Path::parse("/server/name"),
+                statefs_core::Value::String("Snapshot Server".into()),
+            )
+            .unwrap();
+        snap_store
+            .insert(
+                &statefs_core::Path::parse("/server/max_players"),
+                statefs_core::Value::Int(32),
+            )
+            .unwrap();
+        let snap_bytes = statefs_codec_bin::export_snapshot_bytes(&snap_store);
+
+        // Build layered state:
+        // 1. Pre-existing value in builder
+        // 2. Snapshot merge
+        // 3. TOML override of snapshot key
+        // 4. with_value final override
+        let store = StateFs::builder()
+            .with_value("/pre_existing/item", "preserved")
+            .unwrap()
+            .with_snapshot_bytes(&snap_bytes)
+            .unwrap()
+            .with_toml_str(
+                r#"
+                [server]
+                name = "TOML Override Server"
+                "#,
+            )
+            .unwrap()
+            .with_value("/server/max_players", 64)
+            .unwrap()
+            .build()
+            .unwrap();
+
+        // 1. Pre-existing value was preserved across snapshot merge
+        assert_eq!(
+            store
+                .get_str("/pre_existing/item")
+                .and_then(|n| n.value.as_str()),
+            Some("preserved")
+        );
+        // 2. TOML overrode snapshot name
+        assert_eq!(
+            store.get_str("/server/name").and_then(|n| n.value.as_str()),
+            Some("TOML Override Server")
+        );
+        // 3. Manual with_value overrode max_players
+        assert_eq!(
+            store
+                .get_str("/server/max_players")
+                .and_then(|n| n.value.as_int()),
+            Some(64)
+        );
+    }
+
+    #[test]
+    fn test_builder_conflicting_readonly_overrides() {
+        // Readonly node insertion
+        let builder = StateFs::builder()
+            .with_readonly_value("/protected/setting", "locked")
+            .unwrap();
+
+        // Attempting to overwrite a read-only setting must yield StoreError::ReadOnly
+        let res = builder.with_value("/protected/setting", "tampered");
+        assert!(res.is_err());
+        match res.unwrap_err() {
+            StateFsError::Store(statefs_core::StoreError::ReadOnly(path)) => {
+                assert_eq!(path.to_string(), "/protected/setting");
+            }
+            other => panic!("Expected StoreError::ReadOnly, got: {:?}", other),
+        }
+    }
+
+    #[test]
+    #[cfg(all(feature = "toml", feature = "json", feature = "std"))]
+    fn test_builder_error_propagation_on_invalid_sources() {
+        // Corrupt TOML
+        let toml_err = StateFs::builder().with_toml_str("invalid = [toml unclosed");
+        assert!(toml_err.is_err());
+        assert!(matches!(toml_err.unwrap_err(), StateFsError::Toml(_)));
+
+        // Corrupt JSON
+        let json_err = StateFs::builder().with_json_str("{\"unclosed\": ");
+        assert!(json_err.is_err());
+        assert!(matches!(json_err.unwrap_err(), StateFsError::Json(_)));
+
+        // Non-existent file
+        let io_err = StateFs::builder().with_toml_file("C:/non_existent_statefs_file.toml");
+        assert!(io_err.is_err());
+        assert!(matches!(io_err.unwrap_err(), StateFsError::Io(_)));
     }
 }

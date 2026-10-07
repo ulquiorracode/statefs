@@ -18,7 +18,8 @@ typedef struct StatefsStore StatefsStore;
 
 /**
  * Retrieves the most recent error message on the calling thread.
- * Returns bytes copied into buf. If no error occurred, returns 0 and writes empty string.
+ * Writes at most max_len - 1 characters plus null terminator into buf.
+ * Returns the number of characters written into buf (excluding null terminator), or 0 if no error.
  */
 size_t statefs_last_error(char* buf, size_t max_len);
 
@@ -55,6 +56,8 @@ int32_t statefs_store_insert_float(StatefsStore* store, const char* path, double
 
 /**
  * Reads a string value from path into buf.
+ * If buf is NULL and buf_len is 0, writes required buffer capacity (including null terminator) into *written and returns 0.
+ * If buf_len is less than the required capacity, writes required capacity into *written, records error, and returns -1.
  * Returns 0 on success, 1 if path not found, -1 on error or type mismatch.
  */
 int32_t statefs_store_get_str(const StatefsStore* store, const char* path, char* buf, size_t buf_len, size_t* written);

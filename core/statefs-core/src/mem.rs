@@ -618,6 +618,7 @@ impl Store for MemStore {
 mod tests {
     use super::*;
     use crate::value::Value;
+    use alloc::string::ToString;
 
     #[test]
     fn test_memstore_insert_get_remove() {
