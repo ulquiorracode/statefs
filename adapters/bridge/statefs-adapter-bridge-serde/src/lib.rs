@@ -243,37 +243,43 @@ impl<'de> Deserializer<'de> for ValueDeserializer {
 
     fn deserialize_i8<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value, Self::Error> {
         let i = self.as_i64_val()?;
-        let val = i8::try_from(i).map_err(|e| DeError::TypeMismatch(format!("i8 overflow: {e}")))?;
+        let val =
+            i8::try_from(i).map_err(|e| DeError::TypeMismatch(format!("i8 overflow: {e}")))?;
         visitor.visit_i8(val)
     }
 
     fn deserialize_i16<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value, Self::Error> {
         let i = self.as_i64_val()?;
-        let val = i16::try_from(i).map_err(|e| DeError::TypeMismatch(format!("i16 overflow: {e}")))?;
+        let val =
+            i16::try_from(i).map_err(|e| DeError::TypeMismatch(format!("i16 overflow: {e}")))?;
         visitor.visit_i16(val)
     }
 
     fn deserialize_i32<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value, Self::Error> {
         let i = self.as_i64_val()?;
-        let val = i32::try_from(i).map_err(|e| DeError::TypeMismatch(format!("i32 overflow: {e}")))?;
+        let val =
+            i32::try_from(i).map_err(|e| DeError::TypeMismatch(format!("i32 overflow: {e}")))?;
         visitor.visit_i32(val)
     }
 
     fn deserialize_u8<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value, Self::Error> {
         let u = self.as_u64_val()?;
-        let val = u8::try_from(u).map_err(|e| DeError::TypeMismatch(format!("u8 overflow: {e}")))?;
+        let val =
+            u8::try_from(u).map_err(|e| DeError::TypeMismatch(format!("u8 overflow: {e}")))?;
         visitor.visit_u8(val)
     }
 
     fn deserialize_u16<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value, Self::Error> {
         let u = self.as_u64_val()?;
-        let val = u16::try_from(u).map_err(|e| DeError::TypeMismatch(format!("u16 overflow: {e}")))?;
+        let val =
+            u16::try_from(u).map_err(|e| DeError::TypeMismatch(format!("u16 overflow: {e}")))?;
         visitor.visit_u16(val)
     }
 
     fn deserialize_u32<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value, Self::Error> {
         let u = self.as_u64_val()?;
-        let val = u32::try_from(u).map_err(|e| DeError::TypeMismatch(format!("u32 overflow: {e}")))?;
+        let val =
+            u32::try_from(u).map_err(|e| DeError::TypeMismatch(format!("u32 overflow: {e}")))?;
         visitor.visit_u32(val)
     }
 
@@ -330,7 +336,9 @@ impl<'de> Deserializer<'de> for ValueDeserializer {
                     ))
                 }
             }
-            _ => Err(DeError::TypeMismatch("Expected string or map for enum".to_string())),
+            _ => Err(DeError::TypeMismatch(
+                "Expected string or map for enum".to_string(),
+            )),
         }
     }
 
@@ -440,14 +448,23 @@ impl<'de> de::VariantAccess<'de> for VariantDeserializer {
         }
     }
 
-    fn newtype_variant_seed<T: DeserializeSeed<'de>>(self, seed: T) -> Result<T::Value, Self::Error> {
+    fn newtype_variant_seed<T: DeserializeSeed<'de>>(
+        self,
+        seed: T,
+    ) -> Result<T::Value, Self::Error> {
         seed.deserialize(ValueDeserializer::new(self.val))
     }
 
-    fn tuple_variant<V: Visitor<'de>>(self, _len: usize, visitor: V) -> Result<V::Value, Self::Error> {
+    fn tuple_variant<V: Visitor<'de>>(
+        self,
+        _len: usize,
+        visitor: V,
+    ) -> Result<V::Value, Self::Error> {
         match self.val {
             Value::Array(arr) => visitor.visit_seq(SeqDeserializer::new(arr)),
-            _ => Err(DeError::TypeMismatch("Expected tuple variant sequence".to_string())),
+            _ => Err(DeError::TypeMismatch(
+                "Expected tuple variant sequence".to_string(),
+            )),
         }
     }
 
@@ -458,7 +475,9 @@ impl<'de> de::VariantAccess<'de> for VariantDeserializer {
     ) -> Result<V::Value, Self::Error> {
         match self.val {
             Value::Map(map) => visitor.visit_map(MapDeserializer::new(map)),
-            _ => Err(DeError::TypeMismatch("Expected struct variant map".to_string())),
+            _ => Err(DeError::TypeMismatch(
+                "Expected struct variant map".to_string(),
+            )),
         }
     }
 }
@@ -532,12 +551,27 @@ mod tests {
     #[test]
     fn test_adversarial_enum_and_optional_and_unit() {
         let mut store = MemStore::new();
-        store.insert(&Path::parse("/c/id"), Value::from(255)).unwrap();
-        store.insert(&Path::parse("/c/mode"), Value::from("Deathmatch")).unwrap();
-        store.insert(&Path::parse("/c/opt_field"), Value::from("present")).unwrap();
-        store.insert(&Path::parse("/c/none_field"), Value::Null).unwrap();
-        store.insert(&Path::parse("/c/unit_val"), Value::Null).unwrap();
-        store.insert(&Path::parse("/c/tags"), Value::Array(vec![Value::from("tag1"), Value::from("tag2")])).unwrap();
+        store
+            .insert(&Path::parse("/c/id"), Value::from(255))
+            .unwrap();
+        store
+            .insert(&Path::parse("/c/mode"), Value::from("Deathmatch"))
+            .unwrap();
+        store
+            .insert(&Path::parse("/c/opt_field"), Value::from("present"))
+            .unwrap();
+        store
+            .insert(&Path::parse("/c/none_field"), Value::Null)
+            .unwrap();
+        store
+            .insert(&Path::parse("/c/unit_val"), Value::Null)
+            .unwrap();
+        store
+            .insert(
+                &Path::parse("/c/tags"),
+                Value::Array(vec![Value::from("tag1"), Value::from("tag2")]),
+            )
+            .unwrap();
 
         let model: ComplexModel = store.extract("/c").expect("extract complex model");
         assert_eq!(
@@ -556,11 +590,15 @@ mod tests {
     #[test]
     fn test_adversarial_numeric_overflow_detection() {
         let mut store = MemStore::new();
-        store.insert(&Path::parse("/num/u8"), Value::from(300)).unwrap();
+        store
+            .insert(&Path::parse("/num/u8"), Value::from(300))
+            .unwrap();
         let res: Result<ComplexModel, _> = store.extract("/num");
         assert!(res.is_err(), "Must reject u8 overflow");
 
-        store.insert(&Path::parse("/num/u8"), Value::from(-1)).unwrap();
+        store
+            .insert(&Path::parse("/num/u8"), Value::from(-1))
+            .unwrap();
         let res2: Result<ComplexModel, _> = store.extract("/num");
         assert!(res2.is_err(), "Must reject negative value for u8");
     }
@@ -572,7 +610,9 @@ mod tests {
         for i in 0..10 {
             current_path = format!("{current_path}/level_{i}");
         }
-        store.insert(&Path::parse(&current_path), Value::from("deep_leaf")).unwrap();
+        store
+            .insert(&Path::parse(&current_path), Value::from("deep_leaf"))
+            .unwrap();
 
         let val = subtree_to_value(&store, "/root").expect("extract deeply nested tree as value");
         let mut cur = &val;
@@ -587,9 +627,15 @@ mod tests {
     #[test]
     fn test_adversarial_special_characters_and_empty_keys() {
         let mut store = MemStore::new();
-        store.insert(&Path::parse("/weird/key with spaces"), Value::from(1)).unwrap();
-        store.insert(&Path::parse("/weird/key.with.dots"), Value::from(2)).unwrap();
-        store.insert(&Path::parse("/weird/@#$%^&*"), Value::from(3)).unwrap();
+        store
+            .insert(&Path::parse("/weird/key with spaces"), Value::from(1))
+            .unwrap();
+        store
+            .insert(&Path::parse("/weird/key.with.dots"), Value::from(2))
+            .unwrap();
+        store
+            .insert(&Path::parse("/weird/@#$%^&*"), Value::from(3))
+            .unwrap();
 
         use std::collections::HashMap;
         let map: HashMap<String, i64> = store.extract("/weird").expect("extract weird keys map");
