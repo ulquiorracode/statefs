@@ -13,6 +13,8 @@ members = [
     "adapters/opt/statefs-adapter-opt-mmap",
     "adapters/opt/statefs-adapter-opt-lockfree",
     "adapters/bridge/statefs-adapter-bridge-config",
+    "adapters/bridge/statefs-adapter-bridge-env",
+    "adapters/bridge/statefs-adapter-c",
     "adapters/compute/statefs-adapter-compute-rayon",
     "vfs/statefs-vfs-core",
     "vfs/statefs-vfs-disk",

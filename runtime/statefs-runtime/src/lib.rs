@@ -7,10 +7,13 @@
 
 extern crate alloc;
 
-use statefs_adapter_opt_cache::{DEFAULT_CACHE_CAP, L1PathCache};
-use statefs_adapter_opt_simd::SimdPathScanner;
-use statefs_core::{MemStore, Node};
-use stitch_rs::middleware::TerminalHandler;
+pub mod builder;
+
+pub use builder::{StateFs, StateFsBuilder, StateFsError};
+pub use statefs_adapter_opt_cache::{DEFAULT_CACHE_CAP, L1PathCache};
+pub use statefs_adapter_opt_simd::SimdPathScanner;
+pub use statefs_core::{MemStore, Node};
+pub use stitch_rs::middleware::TerminalHandler;
 
 /// Execution workload scenario under which a query operates.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
@@ -239,5 +242,55 @@ mod tests {
         assert_eq!(node.value.as_int(), Some(128));
         assert_eq!(resolver.metrics.cache_misses, 1); // Miss count did NOT increase!
         assert_eq!(resolver.metrics.cache_hits, 1); // Hit count increased!
+    }
+
+    #[test]
+    fn test_statefs_builder_composition() {
+        let store = StateFs::builder()
+            .with_toml_str(
+                r#"
+                [server]
+                tickrate = 128
+                name = "Competitive HLDS"
+            "#,
+            )
+            .expect("toml parse")
+            .with_json_str(
+                r#"
+                {
+                    "network": {
+                        "port": 27015
+                    }
+                }
+            "#,
+            )
+            .expect("json parse")
+            .with_value("/custom/override", 42)
+            .expect("custom value")
+            .build()
+            .expect("build store");
+
+        assert_eq!(
+            store
+                .get_str("/server/tickrate")
+                .and_then(|n| n.value.as_int()),
+            Some(128)
+        );
+        assert_eq!(
+            store.get_str("/server/name").and_then(|n| n.value.as_str()),
+            Some("Competitive HLDS")
+        );
+        assert_eq!(
+            store
+                .get_str("/network/port")
+                .and_then(|n| n.value.as_int()),
+            Some(27015)
+        );
+        assert_eq!(
+            store
+                .get_str("/custom/override")
+                .and_then(|n| n.value.as_int()),
+            Some(42)
+        );
     }
 }

@@ -39,6 +39,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `statefs-vfs-disk`: sandboxed physical directory mount provider with directory traversal attack prevention.
 - `statefs-vfs-package`: in-memory and zero-copy continuous package container provider (WAD3 / PAK / FlatArchive).
 - `matrix_bench`: multi-candidate unified matrix benchmark grid comparing 8 tiers across scales and measuring cold boot / WAL throughput / PathHandle direct lookup.
+- `statefs-core::source::StateSource`: monomorphic SPI extension trait for pluggable external state ingestion.
+- `statefs-runtime::StateFs` & `StateFsBuilder`: fluent multi-source configuration builder and facade with two-line initialization.
+- `statefs-adapter-bridge-env`: environment variable bridge supporting prefix filtering, customizable segment separators, and automatic scalar type inference.
+- `statefs-adapter-c`: universal C-ABI dynamic and static library bridge with full panic barriers, null safety, and `include/statefs.h` C header.
+- In-memory snapshot buffer support in `statefs-codec-bin` (`export_snapshot_bytes`, `restore_snapshot_bytes`).
+- Root ingest convenience functions `ingest_toml` and `ingest_json` in TOML and JSON codecs.
 
 ### Fixed
 - **Snapshot Format v2 & Complete Value Roundtrip**: Extended snapshot header to version 2 (`SnapshotHeader`) and serialized node values via bounded recursive binary encoding in `Value::encode_into` and `Value::decode_from`. `RawNode` now records `value_offset` and `value_len`, enabling true state restoration in `statefs-codec-bin` and zero-copy value access in `MmapStorageBacking`.

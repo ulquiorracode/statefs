@@ -54,6 +54,11 @@ pub fn ingest_toml_str(
     Ok(())
 }
 
+/// Ingests a raw TOML string into a [`MemStore`] at the root prefix (`"/"`).
+pub fn ingest_toml(store: &mut MemStore, raw_toml: &str) -> Result<(), TomlCodecError> {
+    ingest_toml_str(store, "/", raw_toml)
+}
+
 fn toml_to_value(val: &toml::Value, depth: usize) -> Option<Value> {
     if depth > MAX_TOML_DEPTH {
         return None;

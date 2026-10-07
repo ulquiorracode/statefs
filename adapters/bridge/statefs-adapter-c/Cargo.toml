@@ -1,0 +1,20 @@
+[package]
+name = "statefs-adapter-c"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Universal C-ABI dynamic and static library bridge for StateFS"
+
+[lib]
+crate-type = ["cdylib", "staticlib", "rlib"]
+
+[dependencies]
+statefs-core = { path = "../../../core/statefs-core", version = "0.1.0" }
+statefs-codec-json = { path = "../../../codecs/statefs-codec-json", version = "0.1.0" }
+statefs-codec-toml = { path = "../../../codecs/statefs-codec-toml", version = "0.1.0" }
+statefs-codec-bin = { path = "../../../codecs/statefs-codec-bin", version = "0.1.0" }
+statefs-adapter-bridge-env = { path = "../statefs-adapter-bridge-env", version = "0.1.0" }
+
+[dev-dependencies]

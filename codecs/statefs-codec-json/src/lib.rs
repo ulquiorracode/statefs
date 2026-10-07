@@ -53,6 +53,11 @@ pub fn ingest_json_str(
     Ok(())
 }
 
+/// Ingests a raw JSON string into a [`MemStore`] at the root prefix (`"/"`).
+pub fn ingest_json(store: &mut MemStore, raw_json: &str) -> Result<(), JsonCodecError> {
+    ingest_json_str(store, "/", raw_json)
+}
+
 fn json_to_value(val: &serde_json::Value, depth: usize) -> Option<Value> {
     if depth > MAX_JSON_DEPTH {
         return None;
