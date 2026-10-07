@@ -10,25 +10,29 @@ keywords = ["runtime", "resolver", "pipeline", "orchestration"]
 categories = ["data-structures", "no-std"]
 
 [features]
-default = ["std", "env", "toml", "json", "snapshot"]
+default = ["std", "env", "toml", "json", "snapshot", "serde"]
 std = ["statefs-core/std"]
 env = ["dep:statefs-adapter-bridge-env"]
 toml = ["dep:statefs-codec-toml"]
 json = ["dep:statefs-codec-json"]
 snapshot = ["dep:statefs-codec-bin"]
+serde = ["dep:serde", "dep:statefs-adapter-bridge-serde"]
 
 [dependencies]
 statefs-core = { path = "../../core/statefs-core", default-features = false }
 statefs-adapter-opt-cache = { path = "../../adapters/opt/statefs-adapter-opt-cache", default-features = false }
 statefs-adapter-opt-simd = { path = "../../adapters/opt/statefs-adapter-opt-simd", default-features = false }
 stitch-rs = { git = "https://github.com/ulquiorracode/stitch-rs.git", branch = "main", default-features = false }
+serde = { version = "1.0", default-features = false, optional = true }
 
 statefs-adapter-bridge-env = { path = "../../adapters/bridge/statefs-adapter-bridge-env", optional = true }
+statefs-adapter-bridge-serde = { path = "../../adapters/bridge/statefs-adapter-bridge-serde", optional = true }
 statefs-codec-toml = { path = "../../codecs/statefs-codec-toml", optional = true }
 statefs-codec-json = { path = "../../codecs/statefs-codec-json", optional = true }
 statefs-codec-bin = { path = "../../codecs/statefs-codec-bin", optional = true }
 
 [dev-dependencies]
+serde = { version = "1.0", features = ["derive"] }
 statefs-adapter-opt-lockfree = { path = "../../adapters/opt/statefs-adapter-opt-lockfree" }
 statefs-adapter-opt-mmap = { path = "../../adapters/opt/statefs-adapter-opt-mmap" }
 statefs-adapter-path-handles = { path = "../../adapters/path/statefs-adapter-path-handles" }

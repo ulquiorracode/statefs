@@ -1,0 +1,46 @@
+name: "Bug Report"
+description: "File a bug report for StateFS"
+title: "fix: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for reporting a bug. Please ensure you are testing on the latest version of `statefs`.
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: A clear and concise description of the bug.
+      placeholder: Describe what happened.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to Reproduce
+      description: Minimal reproducible example or code snippet.
+      placeholder: |
+        1. Construct StateFsBuilder...
+        2. Ingest payload...
+        3. Observe error...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior
+      description: What should have happened according to the specification.
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, Rust version, target architecture, active feature flags.
+      placeholder: |
+        - OS: Windows 11 / Linux x86_64
+        - Rust: 1.85+
+        - Features: ["serde", "http"]
+    validations:
+      required: true

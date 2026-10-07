@@ -18,6 +18,8 @@ pub enum StateFsError {
     Json(statefs_codec_json::JsonCodecError),
     #[cfg(feature = "snapshot")]
     Snapshot(std::io::Error),
+    #[cfg(feature = "serde")]
+    Serde(statefs_adapter_bridge_serde::DeError),
     #[cfg(feature = "std")]
     Io(std::io::Error),
     Custom(String),
@@ -33,6 +35,8 @@ impl core::fmt::Display for StateFsError {
             Self::Json(e) => write!(f, "JSON error: {e}"),
             #[cfg(feature = "snapshot")]
             Self::Snapshot(e) => write!(f, "Snapshot error: {e}"),
+            #[cfg(feature = "serde")]
+            Self::Serde(e) => write!(f, "Serde extraction error: {e}"),
             #[cfg(feature = "std")]
             Self::Io(e) => write!(f, "I/O error: {e}"),
             Self::Custom(msg) => write!(f, "{msg}"),
@@ -218,5 +222,14 @@ impl StateFsBuilder {
         self,
     ) -> Result<QueryScenarioResolver<CAP>, StateFsError> {
         Ok(QueryScenarioResolver::new(self.store))
+    }
+
+    /// Extracts a strongly-typed struct directly from the configured store at `path`.
+    #[cfg(feature = "serde")]
+    pub fn extract<T: for<'de> serde::Deserialize<'de>>(
+        &self,
+        path: &str,
+    ) -> Result<T, StateFsError> {
+        statefs_adapter_bridge_serde::extract(&self.store, path).map_err(StateFsError::Serde)
     }
 }

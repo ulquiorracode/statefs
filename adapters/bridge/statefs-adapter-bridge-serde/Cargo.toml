@@ -1,0 +1,15 @@
+[package]
+name = "statefs-adapter-bridge-serde"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Strongly-typed Serde deserialization bridge for StateFS state trees"
+
+[dependencies]
+statefs-core = { path = "../../../core/statefs-core", version = "0.1.0" }
+serde = { version = "1.0", default-features = false, features = ["alloc", "derive"] }
+
+[dev-dependencies]
+serde = { version = "1.0", features = ["derive"] }

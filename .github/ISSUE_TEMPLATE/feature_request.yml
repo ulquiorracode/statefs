@@ -1,0 +1,29 @@
+name: "Feature Request"
+description: "Suggest an idea or architectural enhancement for StateFS"
+title: "feat: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for suggesting an enhancement. StateFS follows strict zero-cost and mechanical sympathy design principles.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem / Motivation
+      description: Is your feature request related to a problem or specific use case?
+      placeholder: A clear and concise description of the motivation.
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed Solution / Architectural Design
+      description: Describe the design or API interface you would like to see.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives Considered
+      description: Describe any alternative solutions or features you've considered.

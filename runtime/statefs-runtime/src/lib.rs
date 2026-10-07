@@ -393,4 +393,33 @@ mod tests {
         assert!(io_err.is_err());
         assert!(matches!(io_err.unwrap_err(), StateFsError::Io(_)));
     }
+
+    #[test]
+    #[cfg(all(feature = "toml", feature = "serde"))]
+    fn test_builder_serde_extract() {
+        #[derive(Debug, PartialEq, serde::Deserialize)]
+        struct ServerCfg {
+            tickrate: u32,
+            hostname: String,
+        }
+
+        let builder = StateFs::builder()
+            .with_toml_str(
+                r#"
+                [server]
+                tickrate = 128
+                hostname = "De_Dust2 HLDS"
+            "#,
+            )
+            .unwrap();
+
+        let cfg: ServerCfg = builder.extract("/server").expect("extract ServerCfg");
+        assert_eq!(
+            cfg,
+            ServerCfg {
+                tickrate: 128,
+                hostname: "De_Dust2 HLDS".to_string(),
+            }
+        );
+    }
 }

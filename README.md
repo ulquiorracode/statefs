@@ -96,6 +96,71 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
+### Strongly-Typed Serde Struct Extraction
+
+```rust
+use serde::Deserialize;
+use statefs_runtime::StateFs;
+
+#[derive(Debug, Deserialize, PartialEq)]
+struct ServerCfg {
+    tickrate: u32,
+    hostname: String,
+}
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let builder = StateFs::builder()
+        .with_toml_str("[server]\ntickrate = 128\nhostname = 'HLDS Pro'")?;
+
+    // Directly extract typed struct from virtual subtree
+    let cfg: ServerCfg = builder.extract("/server")?;
+    assert_eq!(cfg.tickrate, 128);
+    Ok(())
+}
+```
+
+### Live HTTP / Axum Telemetry & Inspector Bridge
+
+Serve live state and allow remote updates over HTTP with atomic revision tracking (`X-StateFS-Revision`):
+
+```rust
+use std::sync::Arc;
+use tokio::sync::RwLock;
+use axum::Router;
+use statefs_core::MemStore;
+use statefs_adapter_bridge_http::statefs_router;
+
+#[tokio::main]
+async fn main() {
+    let store = Arc::new(RwLock::new(MemStore::new()));
+    let app = Router::new().nest("/_state", statefs_router(store));
+    // GET    /_state/server/tickrate -> 128
+    // POST   /_state/server/tickrate -> updates subtree revision
+    // DELETE /_state/server/tickrate -> deletes node
+}
+```
+
+### Universal C-ABI FFI Bridge
+
+StateFS exports a zero-panic C ABI (`include/statefs.h`) with buffer size probing:
+
+```c
+#include "statefs.h"
+#include <stdio.h>
+
+int main() {
+    StateFsStore* store = statefs_store_new();
+    statefs_store_insert_int(store, "/server/tickrate", 128);
+
+    int64_t tickrate = 0;
+    if (statefs_store_get_int(store, "/server/tickrate", &tickrate) == 1) {
+        printf("Tickrate: %lld\n", tickrate);
+    }
+    statefs_store_free(store);
+    return 0;
+}
+```
+
 ### Low-Level Nanokernel Usage (`no_std`)
 
 ```rust
@@ -146,6 +211,8 @@ The StateFS ecosystem is structured around decoupled, zero-cost modular domains:
   - **[`statefs-adapter-opt-mmap`](adapters/opt/statefs-adapter-opt-mmap)**: Zero-copy `memmap2` + `zerocopy` physical storage backing with version and boundary verification.
   - **[`statefs-adapter-opt-lockfree`](adapters/opt/statefs-adapter-opt-lockfree)**: Lock-free SPSC continuous BipBuffer WAL mutation stream adapter via `bbqueue`.
 - **Bridges (`adapters/bridge/`)**:
+  - **[`statefs-adapter-bridge-serde`](adapters/bridge/statefs-adapter-bridge-serde)**: Zero-copy/direct Serde deserializer extracting arbitrary strongly-typed structs from virtual subtrees.
+  - **[`statefs-adapter-bridge-http`](adapters/bridge/statefs-adapter-bridge-http)**: High-performance Axum 0.8 HTTP REST API & telemetry inspector with atomic `X-StateFS-Revision`.
   - **[`statefs-adapter-bridge-env`](adapters/bridge/statefs-adapter-bridge-env)**: Automated environment variable ingestion with prefix filtering and scalar type inference.
   - **[`statefs-adapter-c`](adapters/bridge/statefs-adapter-c)**: Universal C-ABI dynamic and static library bridge with C header (`include/statefs.h`) and panic barriers.
   - **[`statefs-adapter-bridge-config`](adapters/bridge/statefs-adapter-bridge-config)**: Drop-in compatibility wrapper for code using `config-rs`.
