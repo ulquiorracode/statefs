@@ -57,17 +57,50 @@ pub fn export_snapshot_raw<P: AsRef<Path>>(
     Ok(())
 }
 
-/// Restores a full in-memory [`MemStore`] with topology, strings, and values from a binary snapshot file.
-pub fn restore_snapshot<P: AsRef<Path>>(path: P) -> io::Result<MemStore> {
-    let mut file = File::open(path)?;
-    let mut data = Vec::new();
-    file.read_to_end(&mut data)?;
+/// Exports an in-memory state tree snapshot directly into an in-memory byte buffer.
+pub fn export_snapshot_bytes(store: &MemStore) -> Vec<u8> {
+    let (nodes, strings, values) = store.export_snapshot_parts();
+    let header = SnapshotHeader {
+        magic: SNAPSHOT_MAGIC,
+        version: SNAPSHOT_VERSION,
+        node_count: nodes.len() as u32,
+        string_bytes_len: strings.len() as u32,
+        value_bytes_len: values.len() as u32,
+        _pad: [0u8; 8],
+    };
 
+    let header_size = size_of::<SnapshotHeader>();
+    let nodes_size = nodes.len() * size_of::<RawNode>();
+    let total_len = header_size + nodes_size + strings.len() + values.len();
+
+    let mut buf = Vec::with_capacity(total_len);
+
+    // SAFETY: SnapshotHeader is repr(C) with 32 bytes
+    let header_bytes = unsafe {
+        core::slice::from_raw_parts(&header as *const SnapshotHeader as *const u8, header_size)
+    };
+    buf.extend_from_slice(header_bytes);
+
+    for node in &nodes {
+        // SAFETY: RawNode is repr(C) pod
+        let node_bytes = unsafe {
+            core::slice::from_raw_parts(node as *const RawNode as *const u8, size_of::<RawNode>())
+        };
+        buf.extend_from_slice(node_bytes);
+    }
+    buf.extend_from_slice(strings);
+    buf.extend_from_slice(&values);
+
+    buf
+}
+
+/// Restores a full in-memory [`MemStore`] from an in-memory binary snapshot byte slice.
+pub fn restore_snapshot_bytes(data: &[u8]) -> io::Result<MemStore> {
     let header_size = size_of::<SnapshotHeader>();
     if data.len() < header_size {
         return Err(io::Error::new(
             io::ErrorKind::InvalidData,
-            "Snapshot file smaller than header",
+            "Snapshot buffer smaller than header",
         ));
     }
 
@@ -109,7 +142,7 @@ pub fn restore_snapshot<P: AsRef<Path>>(path: P) -> io::Result<MemStore> {
     if data.len() < total_required {
         return Err(io::Error::new(
             io::ErrorKind::UnexpectedEof,
-            "Snapshot file truncated",
+            "Snapshot buffer truncated",
         ));
     }
 
@@ -128,6 +161,14 @@ pub fn restore_snapshot<P: AsRef<Path>>(path: P) -> io::Result<MemStore> {
             format!("Failed to restore store: {:?}", e),
         )
     })
+}
+
+/// Restores a full in-memory [`MemStore`] with topology, strings, and values from a binary snapshot file.
+pub fn restore_snapshot<P: AsRef<Path>>(path: P) -> io::Result<MemStore> {
+    let mut file = File::open(path)?;
+    let mut data = Vec::new();
+    file.read_to_end(&mut data)?;
+    restore_snapshot_bytes(&data)
 }
 
 #[cfg(test)]

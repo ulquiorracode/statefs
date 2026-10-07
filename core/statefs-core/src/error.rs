@@ -2,7 +2,6 @@
 
 use crate::path::Path;
 use alloc::string::String;
-use core::error::Error;
 use core::fmt::{Display, Formatter, Result};
 
 /// Core errors emitted by StateFS store operations.
@@ -30,4 +29,4 @@ impl Display for StoreError {
 }
 
 #[cfg(feature = "std")]
-impl Error for StoreError {}
+impl std::error::Error for StoreError {}

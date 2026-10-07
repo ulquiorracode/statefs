@@ -68,14 +68,35 @@ StateFS is architected around the Dense Left-Child / Right-Sibling Arena:
 
 ## Quickstart
 
-Add `statefs-core` to your `Cargo.toml`:
+Add `statefs-runtime` to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-statefs-core = "0.1"
+statefs-runtime = "0.1"
 ```
 
-### Basic Usage
+### High-Level Fluent Composition (Two Lines of Code)
+
+```rust
+use statefs_runtime::StateFs;
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // 1. Fluent multi-source ingestion in two lines
+    let store = StateFs::builder()
+        .with_toml_str("[server]\ntickrate = 128\nmotd = 'Welcome!'")?
+        .with_env("APP")?
+        .build()?;
+
+    // 2. Zero-allocation hot-path query by raw string
+    let tickrate = store.get_str("/server/tickrate")
+        .and_then(|node| node.value.as_int());
+    assert_eq!(tickrate, Some(128));
+
+    Ok(())
+}
+```
+
+### Low-Level Nanokernel Usage (`no_std`)
 
 ```rust
 use statefs_core::{MemStore, Path, Store, Value};
@@ -110,7 +131,7 @@ The StateFS ecosystem is structured around decoupled, zero-cost modular domains:
 - **Core (`core/`)**:
   - **[`statefs-core`](core/statefs-core)**: Pure `no_std` nanokernel (Arena Trie, StringPool, Path, Value, Storage Ports, Subtree Revision, `SubtreeWatcher`, Glob matching).
 - **Runtime (`runtime/`)**:
-  - **[`statefs-runtime`](runtime/statefs-runtime)**: Orchestration engine, scenario resolvers, `stitch-rs` U-cycle pipeline integration, and production examples.
+  - **[`statefs-runtime`](runtime/statefs-runtime)**: Orchestration engine, fluent `StateFs::builder()`, scenario resolvers, `stitch-rs` U-cycle pipeline integration, and production examples.
 - **Codecs (`codecs/`)**:
   - **[`statefs-codec-toml`](codecs/statefs-codec-toml)**: Streaming TOML ingestion and tree serializer.
   - **[`statefs-codec-json`](codecs/statefs-codec-json)**: Streaming JSON ingestion and tree exporter.
@@ -125,6 +146,8 @@ The StateFS ecosystem is structured around decoupled, zero-cost modular domains:
   - **[`statefs-adapter-opt-mmap`](adapters/opt/statefs-adapter-opt-mmap)**: Zero-copy `memmap2` + `zerocopy` physical storage backing with version and boundary verification.
   - **[`statefs-adapter-opt-lockfree`](adapters/opt/statefs-adapter-opt-lockfree)**: Lock-free SPSC continuous BipBuffer WAL mutation stream adapter via `bbqueue`.
 - **Bridges (`adapters/bridge/`)**:
+  - **[`statefs-adapter-bridge-env`](adapters/bridge/statefs-adapter-bridge-env)**: Automated environment variable ingestion with prefix filtering and scalar type inference.
+  - **[`statefs-adapter-c`](adapters/bridge/statefs-adapter-c)**: Universal C-ABI dynamic and static library bridge with C header (`include/statefs.h`) and panic barriers.
   - **[`statefs-adapter-bridge-config`](adapters/bridge/statefs-adapter-bridge-config)**: Drop-in compatibility wrapper for code using `config-rs`.
 - **Compute Adapters (`adapters/compute/`)**:
   - **[`statefs-adapter-compute-rayon`](adapters/compute/statefs-adapter-compute-rayon)**: Thread-pool parallel batch queries via `rayon`.

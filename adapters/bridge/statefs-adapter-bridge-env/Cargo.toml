@@ -1,0 +1,13 @@
+[package]
+name = "statefs-adapter-bridge-env"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Environment variable ingestion bridge for StateFS"
+
+[dependencies]
+statefs-core = { path = "../../../core/statefs-core", version = "0.1.0" }
+
+[dev-dependencies]
