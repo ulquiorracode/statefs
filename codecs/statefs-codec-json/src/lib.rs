@@ -41,6 +41,17 @@ impl From<StoreError> for JsonCodecError {
 /// Maximum recursion depth allowed during JSON traversal to prevent stack exhaustion.
 const MAX_JSON_DEPTH: usize = 32;
 
+/// Ingests a pre-parsed [`serde_json::Value`] into a [`MemStore`] under the specified base path prefix.
+pub fn ingest_json_value(
+    store: &mut MemStore,
+    prefix: &str,
+    json_val: &serde_json::Value,
+) -> Result<(), JsonCodecError> {
+    let p = Path::parse(prefix);
+    flatten_json_value(store, &p, json_val, 0)?;
+    Ok(())
+}
+
 /// Ingests a raw JSON string into a [`MemStore`] under the specified base path prefix.
 pub fn ingest_json_str(
     store: &mut MemStore,
@@ -48,9 +59,7 @@ pub fn ingest_json_str(
     raw_json: &str,
 ) -> Result<(), JsonCodecError> {
     let json_val: serde_json::Value = serde_json::from_str(raw_json)?;
-    let p = Path::parse(prefix);
-    flatten_json_value(store, &p, &json_val, 0)?;
-    Ok(())
+    ingest_json_value(store, prefix, &json_val)
 }
 
 /// Ingests a raw JSON string into a [`MemStore`] at the root prefix (`"/"`).

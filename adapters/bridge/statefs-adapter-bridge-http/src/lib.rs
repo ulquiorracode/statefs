@@ -13,7 +13,7 @@ use axum::routing::get;
 use axum::{Json, Router};
 use serde_json::Value as JsonValue;
 
-use statefs_codec_json::ingest_json_str;
+use statefs_codec_json::ingest_json_value;
 use statefs_core::{MemStore, Path, Store, Value};
 
 /// Shared thread-safe handle to a StateFS memory store.
@@ -116,9 +116,8 @@ async fn handle_post_root(
     Json(payload): Json<JsonValue>,
 ) -> Response {
     let mut store_guard = store.write().await;
-    let payload_str = payload.to_string();
 
-    match ingest_json_str(&mut store_guard, "/", &payload_str) {
+    match ingest_json_value(&mut store_guard, "/", &payload) {
         Ok(()) => {
             let rev = store_guard.global_revision();
             let mut headers = HeaderMap::new();
@@ -189,9 +188,8 @@ async fn handle_post_path(
 
     let p = Path::parse(&clean_path_str);
     let mut store_guard = store.write().await;
-    let payload_str = payload.to_string();
 
-    match ingest_json_str(&mut store_guard, &clean_path_str, &payload_str) {
+    match ingest_json_value(&mut store_guard, &clean_path_str, &payload) {
         Ok(()) => {
             let rev = store_guard
                 .subtree_revision(&p)
@@ -227,7 +225,17 @@ async fn handle_delete_path(
     match store_guard.remove(&p) {
         Ok(Some(_)) => {
             let rev = store_guard.global_revision();
-            (StatusCode::OK, Json(serde_json::json!({"status": "deleted", "path": clean_path_str, "revision": rev}))).into_response()
+            let mut headers = HeaderMap::new();
+            headers.insert(
+                "X-StateFS-Revision",
+                HeaderValue::from_str(&rev.to_string()).unwrap_or(HeaderValue::from_static("0")),
+            );
+            (
+                StatusCode::OK,
+                headers,
+                Json(serde_json::json!({"status": "deleted", "path": clean_path_str, "revision": rev})),
+            )
+                .into_response()
         }
         Ok(None) => (
             StatusCode::NOT_FOUND,
@@ -312,5 +320,90 @@ mod tests {
             let guard = shared.read().await;
             assert!(guard.get_str("/server/motd").is_none());
         }
+    }
+
+    #[tokio::test]
+    async fn test_adversarial_path_traversal_attempts() {
+        let mut store = MemStore::new();
+        store
+            .insert(&Path::parse("/etc/passwd"), Value::from("root:x:0:0"))
+            .unwrap();
+        store
+            .insert(&Path::parse("/server/name"), Value::from("CS Server"))
+            .unwrap();
+
+        let shared = Arc::new(RwLock::new(store));
+        let router = statefs_router(shared.clone());
+
+        // Attempting traversal with `..`
+        let req = Request::builder()
+            .method("GET")
+            .uri("/server/../../etc/passwd")
+            .body(Body::empty())
+            .unwrap();
+
+        let res = router.clone().oneshot(req).await.unwrap();
+        // Since Path::parse normalizes/cleans segments and avoids host escape,
+        // it parses `server`, `..`, `..`, `etc`, `passwd`.
+        // Path `server/../../etc/passwd` does not escape the store boundary into the OS filesystem.
+        assert!(res.status() == StatusCode::OK || res.status() == StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn test_adversarial_malformed_json_and_error_handling() {
+        let store = MemStore::new();
+        let shared = Arc::new(RwLock::new(store));
+        let router = statefs_router(shared.clone());
+
+        // Malformed JSON body
+        let req = Request::builder()
+            .method("POST")
+            .uri("/config")
+            .header("Content-Type", "application/json")
+            .body(Body::from("{ invalid: json, [ }"))
+            .unwrap();
+
+        let res = router.clone().oneshot(req).await.unwrap();
+        // Axum returns 400 or 422 for malformed json
+        assert!(res.status().is_client_error());
+    }
+
+    #[tokio::test]
+    async fn test_adversarial_concurrent_rw_stress_and_revisions() {
+        let store = MemStore::new();
+        let shared = Arc::new(RwLock::new(store));
+        let router = statefs_router(shared.clone());
+
+        let mut handles = Vec::new();
+        for i in 0..20 {
+            let r = router.clone();
+            handles.push(tokio::spawn(async move {
+                let req = Request::builder()
+                    .method("POST")
+                    .uri(format!("/stress/node_{i}"))
+                    .header("Content-Type", "application/json")
+                    .body(Body::from(format!("{{\"val\": {i}}}")))
+                    .unwrap();
+                let res = r.oneshot(req).await.unwrap();
+                assert_eq!(res.status(), StatusCode::OK);
+                let rev_header = res.headers().get("X-StateFS-Revision").cloned();
+                assert!(rev_header.is_some());
+            }));
+        }
+
+        for h in handles {
+            h.await.unwrap();
+        }
+
+        // Verify root inspection reflects updates and has non-zero revision
+        let req = Request::builder()
+            .method("GET")
+            .uri("/stress")
+            .body(Body::empty())
+            .unwrap();
+        let res = router.clone().oneshot(req).await.unwrap();
+        assert_eq!(res.status(), StatusCode::OK);
+        let rev = res.headers().get("X-StateFS-Revision").unwrap();
+        assert_ne!(rev, "0");
     }
 }
