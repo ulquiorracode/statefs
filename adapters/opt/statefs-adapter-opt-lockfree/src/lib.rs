@@ -544,29 +544,94 @@ impl<const CAP: usize> WalConsumer<CAP> {
     }
 
     /// Drains all available mutations from the WAL stream and applies them directly
+    /// to the provided target store using borrowed slices without intermediary heap string allocations.
+    ///
+    /// Returns the number of mutations successfully applied.
+    pub fn drain_to_store_fast(&mut self, store: &mut MemStore) -> Result<usize, WalError> {
+        let mut count = 0;
+        loop {
+            let grant = match self.consumer.read() {
+                Ok(g) => g,
+                Err(ReadGrantError::Empty) => break,
+                Err(_) => return Err(WalError::MalformedFrame),
+            };
+
+            let buf = &*grant;
+            if buf.len() < 11 {
+                grant.release();
+                return Err(WalError::MalformedFrame);
+            }
+
+            let op_code = buf[0];
+            let revision =
+                u64::from_le_bytes(buf[1..9].try_into().map_err(|_| WalError::MalformedFrame)?);
+            let path_len = u16::from_le_bytes(
+                buf[9..11]
+                    .try_into()
+                    .map_err(|_| WalError::MalformedFrame)?,
+            ) as usize;
+
+            let mut offset = 11;
+            if buf.len() < offset + path_len {
+                grant.release();
+                return Err(WalError::MalformedFrame);
+            }
+
+            let path_bytes = &buf[offset..offset + path_len];
+            let path_str = core::str::from_utf8(path_bytes)
+                .map_err(|_| WalError::InvalidPathEncoding)?;
+            offset += path_len;
+
+            if revision < self.last_revision {
+                grant.release();
+                return Err(WalError::NonMonotonicRevision {
+                    current: revision,
+                    previous: self.last_revision,
+                });
+            }
+
+            match op_code {
+                OP_DELETE => {
+                    let parsed = Path::parse(path_str);
+                    let _ = store.remove(&parsed);
+                }
+                OP_INSERT => {
+                    let value = match decode_value_from(buf, &mut offset) {
+                        Ok(v) => v,
+                        Err(e) => {
+                            grant.release();
+                            return Err(e);
+                        }
+                    };
+                    let parsed = Path::parse(path_str);
+                    if store.insert(&parsed, value).is_err() {
+                        grant.release();
+                        return Err(WalError::StoreFailure);
+                    }
+                }
+                _ => {
+                    grant.release();
+                    return Err(WalError::MalformedFrame);
+                }
+            }
+
+            self.last_revision = revision;
+            grant.release();
+            count += 1;
+        }
+
+        Ok(count)
+    }
+
+    /// Drains all available mutations from the WAL stream and applies them directly
     /// to the provided target store.
     ///
     /// Returns the number of mutations successfully applied.
     pub fn drain_to_store(&mut self, store: &mut MemStore) -> Result<usize, WalError> {
-        let mut count = 0;
-        while let Some(event) = self.pop_event()? {
-            match event.op {
-                WalOp::Insert { path, value } => {
-                    let parsed = Path::parse(&path);
-                    store
-                        .insert(&parsed, value)
-                        .map_err(|_| WalError::StoreFailure)?;
-                }
-                WalOp::Delete { path } => {
-                    let parsed = Path::parse(&path);
-                    let _ = store.remove(&parsed);
-                }
-            }
-            count += 1;
-        }
-        Ok(count)
+        self.drain_to_store_fast(store)
     }
 }
+
 
 #[cfg(test)]
 mod tests {
