@@ -13,7 +13,8 @@ pub use builder::{StateFs, StateFsBuilder, StateFsError};
 pub use statefs_adapter_opt_cache::{DEFAULT_CACHE_CAP, L1PathCache};
 pub use statefs_adapter_opt_simd::SimdPathScanner;
 pub use statefs_core::{MemStore, Node};
-pub use stitch_rs::middleware::TerminalHandler;
+pub use stitch_rs::blackboard::Blackboard;
+pub use stitch_rs::middleware::Terminal;
 
 /// Execution workload scenario under which a query operates.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
@@ -113,9 +114,12 @@ impl<const CAP: usize> QueryScenarioResolver<CAP> {
 
 /// Execution context for stitch-rs U-cycle dispatches.
 #[derive(Debug, Default)]
+#[repr(C, align(64))]
 pub struct StateFsContext {
     pub dispatches: u64,
 }
+
+impl Blackboard for StateFsContext {}
 
 /// Terminal handler executing the query at the bottom of the stitch-rs U-cycle.
 pub struct StateFsTerminal<const CAP: usize = DEFAULT_CACHE_CAP> {
@@ -128,8 +132,7 @@ impl<const CAP: usize> StateFsTerminal<CAP> {
     }
 }
 
-impl<'a, const CAP: usize>
-    TerminalHandler<StateFsContext, QueryIntent<'a>, Option<Node>, &'static str>
+impl<'a, const CAP: usize> Terminal<StateFsContext, QueryIntent<'a>, Option<Node>, &'static str>
     for StateFsTerminal<CAP>
 {
     #[inline(always)]
