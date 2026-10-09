@@ -406,10 +406,10 @@ fn main() {
                 let key = query_keys_statefs[i % query_keys_statefs.len()];
                 let _ = black_box(producer.push_insert(key, &test_val, i as u64));
                 if i % 32 == 0 {
-                    let _ = black_box(consumer.drain_to_store(&mut store));
+                    let _ = black_box(consumer.drain_to_store_fast(&mut store));
                 }
             }
-            let _ = black_box(consumer.drain_to_store(&mut store));
+            let _ = black_box(consumer.drain_to_store_fast(&mut store));
             let elapsed = start.elapsed().as_nanos();
 
             results.push(BenchResult {
@@ -421,6 +421,56 @@ fn main() {
                 heap_bytes: wal_mem,
             });
         }
+
+        // 7a. WAL Stage Breakdown: Push Only (Ringbuffer Framing + Grant Commit)
+        {
+            let (mut producer, mut consumer) = create_wal_channel::<65536>();
+            let test_val = Value::from(100);
+            let start = Instant::now();
+            for i in 0..scale {
+                let key = query_keys_statefs[i % query_keys_statefs.len()];
+                let _ = black_box(producer.push_insert(key, &test_val, i as u64));
+                if i % 32 == 0 {
+                    let _ = black_box(consumer.discard_all());
+                }
+            }
+            let _ = black_box(consumer.discard_all());
+            let elapsed = start.elapsed().as_nanos();
+
+            results.push(BenchResult {
+                candidate: "  -> WAL Breakdown [1/3]: Push Only (Framing+Commit)",
+                iterations: scale,
+                total_time_ns: elapsed,
+                ns_per_op: (elapsed as f64) / (scale as f64),
+                ops_per_sec: ((scale as f64) / (elapsed as f64)) * 1_000_000_000.0,
+                heap_bytes: 0,
+            });
+        }
+
+
+        // 7b. WAL Stage Breakdown: Apply Only (Direct MemStore Path::parse + Insert)
+        {
+            let mut store = MemStore::new();
+            populate_statefs(&mut store);
+            let test_val = Value::from(100);
+            let start = Instant::now();
+            for i in 0..scale {
+                let key = query_keys_statefs[i % query_keys_statefs.len()];
+                let parsed = statefs_core::Path::parse(key);
+                let _ = black_box(store.insert(&parsed, test_val.clone()));
+            }
+            let elapsed = start.elapsed().as_nanos();
+
+            results.push(BenchResult {
+                candidate: "  -> WAL Breakdown [2/3]: Apply Only (Path::parse+Insert)",
+                iterations: scale,
+                total_time_ns: elapsed,
+                ns_per_op: (elapsed as f64) / (scale as f64),
+                ops_per_sec: ((scale as f64) / (elapsed as f64)) * 1_000_000_000.0,
+                heap_bytes: 0,
+            });
+        }
+
 
         // 8. Candidate 8: StateFS (PathHandle Direct O(1) Index Lookup)
         {
