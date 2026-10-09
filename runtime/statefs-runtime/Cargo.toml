@@ -22,7 +22,7 @@ serde = ["dep:serde", "dep:statefs-adapter-bridge-serde"]
 statefs-core = { path = "../../core/statefs-core", default-features = false }
 statefs-adapter-opt-cache = { path = "../../adapters/opt/statefs-adapter-opt-cache", default-features = false }
 statefs-adapter-opt-simd = { path = "../../adapters/opt/statefs-adapter-opt-simd", default-features = false }
-stitch-rs = { git = "https://github.com/ulquiorracode/stitch-rs.git", branch = "main", default-features = false }
+stitch-rs = { git = "https://github.com/ulquiorracode/stitch-rs.git", tag = "v0.3.0", default-features = false }
 serde = { version = "1.0", default-features = false, optional = true }
 
 statefs-adapter-bridge-env = { path = "../../adapters/bridge/statefs-adapter-bridge-env", optional = true }

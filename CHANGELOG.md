@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+
 - First public release of `statefs-core` nanokernel.
 - Dense Left-Child / Right-Sibling `ArenaNode` prefix tree architecture over 32-bit indices.
 - Global string deduplication (`StringPool`) with zero heap duplication for recurring keys.
@@ -47,6 +48,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Root ingest convenience functions `ingest_toml` and `ingest_json` in TOML and JSON codecs.
 
 ### Fixed
+
 - **Snapshot Format v2 & Complete Value Roundtrip**: Extended snapshot header to version 2 (`SnapshotHeader`) and serialized node values via bounded recursive binary encoding in `Value::encode_into` and `Value::decode_from`. `RawNode` now records `value_offset` and `value_len`, enabling true state restoration in `statefs-codec-bin` and zero-copy value access in `MmapStorageBacking`.
 - **Strict Storage & Mmap Validation**: Implemented deep structural validation in `MmapStorageBacking::validate()` checking header magic, version, node counts, string table spans, value table spans, and arena index bounds to prevent out-of-bounds reads and panics on crafted binary images.
 - **Path Grammar & VFS Soundness**: Aligned `Path::join` with `Path::parse` by removing implicit dot splitting. Fixed root mount (`"/"`) resolution in `VfsMountHub` and hardened `VfsOverlay` to only fall through on `VfsError::NotFound`, preventing security boundary bypasses on `AccessDenied`. Eliminated TOCTOU vulnerabilities in `vfs-disk`.

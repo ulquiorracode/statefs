@@ -10,12 +10,14 @@
 use statefs_core::path::PathHandle;
 use statefs_core::{MemStore, Path, Store, Value};
 use std::time::Instant;
+use stitch_rs::blackboard::Blackboard;
 use stitch_rs::flow::FlowControl;
-use stitch_rs::middleware::{Middleware, TerminalHandler};
+use stitch_rs::middleware::{Layer, Terminal};
 use stitch_rs::pipeline::Pipeline;
 
 /// Per-frame contextual state passed down and up the U-cycle pipeline.
 #[derive(Debug, Default)]
+#[repr(C, align(64))]
 pub struct HostFrameContext {
     pub frame_index: u64,
     pub total_dispatches: u64,
@@ -23,6 +25,8 @@ pub struct HostFrameContext {
     pub total_simulated_ticks: u64,
     pub total_nanos: u128,
 }
+
+impl Blackboard for HostFrameContext {}
 
 /// Incoming intent for a single engine frame tick (`Host_Frame`).
 #[derive(Debug, Clone, Copy)]
@@ -50,7 +54,7 @@ pub enum HostFrameError {
 /// Middleware Layer 1: Boundary & Sanity Validation (Descent) and Invariant Check (Ascent).
 pub struct FrameBoundaryMiddleware;
 
-impl Middleware<HostFrameContext, HostFrameIntent, HostFrameOutcome, HostFrameError>
+impl Layer<HostFrameContext, HostFrameIntent, HostFrameOutcome, HostFrameError>
     for FrameBoundaryMiddleware
 {
     fn on_enter(
@@ -104,7 +108,7 @@ impl Default for FrameTelemetryMiddleware {
     }
 }
 
-impl Middleware<HostFrameContext, HostFrameIntent, HostFrameOutcome, HostFrameError>
+impl Layer<HostFrameContext, HostFrameIntent, HostFrameOutcome, HostFrameError>
     for FrameTelemetryMiddleware
 {
     fn on_enter(
@@ -170,7 +174,7 @@ impl HostFrameTerminal {
     }
 }
 
-impl TerminalHandler<HostFrameContext, HostFrameIntent, HostFrameOutcome, HostFrameError>
+impl Terminal<HostFrameContext, HostFrameIntent, HostFrameOutcome, HostFrameError>
     for HostFrameTerminal
 {
     fn execute(
@@ -238,8 +242,8 @@ fn main() {
     // Pipeline: FrameBoundaryMiddleware -> FrameTelemetryMiddleware -> HostFrameTerminal
     let terminal = HostFrameTerminal::new(store);
     let mut pipeline = Pipeline::on_terminal(terminal)
-        .use_middleware(FrameTelemetryMiddleware::new())
-        .use_middleware(FrameBoundaryMiddleware);
+        .wrap(FrameTelemetryMiddleware::new())
+        .wrap(FrameBoundaryMiddleware);
 
     let mut ctx = HostFrameContext::default();
 

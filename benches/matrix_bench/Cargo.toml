@@ -19,7 +19,7 @@ statefs-codec-bin = { path = "../../codecs/statefs-codec-bin" }
 statefs-adapter-bridge-config = { path = "../../adapters/bridge/statefs-adapter-bridge-config" }
 statefs-adapter-path-handles = { path = "../../adapters/path/statefs-adapter-path-handles" }
 statefs-adapter-path-tokens = { path = "../../adapters/path/statefs-adapter-path-tokens" }
-stitch-rs = { git = "https://github.com/ulquiorracode/stitch-rs.git", branch = "main" }
+stitch-rs = { git = "https://github.com/ulquiorracode/stitch-rs.git", tag = "v0.3.0" }
 config = { version = "0.14", default-features = false, features = ["toml"] }
 toml = "0.8"
 cap = "0.1"
