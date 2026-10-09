@@ -623,6 +623,18 @@ impl<const CAP: usize> WalConsumer<CAP> {
         Ok(count)
     }
 
+    /// Discards all currently queued frames in the WAL stream without applying them.
+    ///
+    /// Useful for isolating producer write-latency benchmarks.
+    pub fn discard_all(&mut self) -> usize {
+        let mut count = 0;
+        while let Ok(grant) = self.consumer.read() {
+            grant.release();
+            count += 1;
+        }
+        count
+    }
+
     /// Drains all available mutations from the WAL stream and applies them directly
     /// to the provided target store.
     ///
@@ -631,6 +643,7 @@ impl<const CAP: usize> WalConsumer<CAP> {
         self.drain_to_store_fast(store)
     }
 }
+
 
 
 #[cfg(test)]
