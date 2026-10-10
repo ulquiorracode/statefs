@@ -578,8 +578,8 @@ impl<const CAP: usize> WalConsumer<CAP> {
             }
 
             let path_bytes = &buf[offset..offset + path_len];
-            let path_str = core::str::from_utf8(path_bytes)
-                .map_err(|_| WalError::InvalidPathEncoding)?;
+            let path_str =
+                core::str::from_utf8(path_bytes).map_err(|_| WalError::InvalidPathEncoding)?;
             offset += path_len;
 
             if revision < self.last_revision {
@@ -643,8 +643,6 @@ impl<const CAP: usize> WalConsumer<CAP> {
         self.drain_to_store_fast(store)
     }
 }
-
-
 
 #[cfg(test)]
 mod tests {
