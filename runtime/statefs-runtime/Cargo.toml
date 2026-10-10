@@ -10,13 +10,14 @@ keywords = ["runtime", "resolver", "pipeline", "orchestration"]
 categories = ["data-structures", "no-std"]
 
 [features]
-default = ["std", "env", "toml", "json", "snapshot", "serde"]
+default = ["std", "env", "toml", "json", "snapshot", "serde", "config"]
 std = ["statefs-core/std"]
 env = ["dep:statefs-adapter-bridge-env"]
 toml = ["dep:statefs-codec-toml"]
 json = ["dep:statefs-codec-json"]
 snapshot = ["dep:statefs-codec-bin"]
 serde = ["dep:serde", "dep:statefs-adapter-bridge-serde"]
+config = ["dep:statefs-adapter-bridge-config"]
 
 [dependencies]
 statefs-core = { path = "../../core/statefs-core", default-features = false }
@@ -25,6 +26,7 @@ statefs-adapter-opt-simd = { path = "../../adapters/opt/statefs-adapter-opt-simd
 stitch-rs = { git = "https://github.com/ulquiorracode/stitch-rs.git", tag = "v0.3.0", default-features = false }
 serde = { version = "1.0", default-features = false, optional = true }
 
+statefs-adapter-bridge-config = { path = "../../adapters/bridge/statefs-adapter-bridge-config", optional = true }
 statefs-adapter-bridge-env = { path = "../../adapters/bridge/statefs-adapter-bridge-env", optional = true }
 statefs-adapter-bridge-serde = { path = "../../adapters/bridge/statefs-adapter-bridge-serde", optional = true }
 statefs-codec-toml = { path = "../../codecs/statefs-codec-toml", optional = true }

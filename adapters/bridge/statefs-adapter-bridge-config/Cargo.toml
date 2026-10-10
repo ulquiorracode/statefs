@@ -5,11 +5,20 @@ edition.workspace = true
 authors.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "Drop-in compatibility bridge for config-rs powered by StateFS"
-keywords = ["config", "bridge", "compatibility", "adapter"]
+description = "High-performance layered configuration manager and compatibility bridge powered by StateFS"
+keywords = ["config", "manager", "figment", "stacking", "adapter"]
 categories = ["config"]
+
+[features]
+default = ["toml", "env", "serde"]
+toml = ["statefs-codec-toml"]
+env = ["statefs-adapter-bridge-env"]
+serde = ["dep:serde", "statefs-adapter-bridge-serde"]
 
 [dependencies]
 statefs-core = { path = "../../../core/statefs-core" }
-statefs-runtime = { path = "../../../runtime/statefs-runtime" }
-config = { version = "0.14", default-features = false, features = ["toml"] }
+statefs-codec-toml = { path = "../../../codecs/statefs-codec-toml", optional = true }
+statefs-adapter-bridge-env = { path = "../../../adapters/bridge/statefs-adapter-bridge-env", optional = true }
+statefs-adapter-bridge-serde = { path = "../../../adapters/bridge/statefs-adapter-bridge-serde", optional = true }
+serde = { version = "1.0", default-features = false, optional = true }
+config = { version = "0.14", default-features = false, features = ["toml"], optional = true }

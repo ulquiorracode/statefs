@@ -10,6 +10,10 @@ extern crate alloc;
 pub mod builder;
 
 pub use builder::{StateFs, StateFsBuilder, StateFsError};
+#[cfg(feature = "config")]
+pub use statefs_adapter_bridge_config::{
+    ConfigBridge, ConfigError, ConfigInstance, ConfigProvider, Defaults, Profile, StateFsConfig,
+};
 pub use statefs_adapter_opt_cache::{DEFAULT_CACHE_CAP, L1PathCache};
 pub use statefs_adapter_opt_simd::SimdPathScanner;
 pub use statefs_core::{MemStore, Node};
