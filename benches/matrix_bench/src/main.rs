@@ -447,7 +447,6 @@ fn main() {
             });
         }
 
-
         // 7b. WAL Stage Breakdown: Apply Only (Direct MemStore Path::parse + Insert)
         {
             let mut store = MemStore::new();
@@ -470,7 +469,6 @@ fn main() {
                 heap_bytes: 0,
             });
         }
-
 
         // 8. Candidate 8: StateFS (PathHandle Direct O(1) Index Lookup)
         {

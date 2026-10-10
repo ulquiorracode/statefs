@@ -31,7 +31,7 @@ edition = "2024"
 
 authors = ["StateFS Contributors"]
 license = "MIT OR Apache-2.0"
-repository = "https://github.com/ulquiorracode/statefs"
+repository = "https://github.com/ulquiorracode/statefs-rs"
 description = "Universal Hierarchical State & Virtual Configuration Engine"
 keywords = ["vfs", "state", "trie", "reactive", "config"]
 categories = ["data-structures", "no-std", "filesystem"]
