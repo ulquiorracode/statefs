@@ -1,6 +1,6 @@
 # StateFS
 
-[![CI](https://github.com/ulquiorracode/statefs/actions/workflows/ci.yml/badge.svg)](https://github.com/ulquiorracode/statefs/actions/workflows/ci.yml)
+[![CI](https://github.com/ulquiorracode/statefs-rs/actions/workflows/ci.yml/badge.svg)](https://github.com/ulquiorracode/statefs-rs/actions/workflows/ci.yml)
 [![License: MIT OR Apache-2.0](https://img.shields.io/badge/License-MIT%20OR%20Apache--2.0-blue.svg)](LICENSE)
 [![Language: Rust](https://img.shields.io/badge/Language-Rust%202024-orange.svg)](https://www.rust-lang.org/)
 [![no_std](https://img.shields.io/badge/no__std-compatible-brightgreen.svg)](#nanokernel-purity)
